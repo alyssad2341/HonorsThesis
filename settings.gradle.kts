@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "HonorsThesisApplication"
 include(":app")
+include(":wear")
