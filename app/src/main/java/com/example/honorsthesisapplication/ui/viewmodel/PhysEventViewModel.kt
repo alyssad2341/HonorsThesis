@@ -17,4 +17,5 @@ class PhysEventViewModel : ViewModel() {
         )
     )
     val eventList = _eventList.asStateFlow()
+    var selectedEvent: PhysEventModel? = null
 }

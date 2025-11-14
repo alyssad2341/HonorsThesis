@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -28,14 +27,27 @@ import com.example.honorsthesisapplication.data.model.PhysEventModel
 @Composable
 fun PhysEventListComposable(
     aViewModel: PhysEventViewModel = viewModel(),
-    aOnEventSelected: (String) -> Unit
+    aOnEventSelected: (PhysEventModel) -> Unit
 ) {
-    Box {
-        val eventList by aViewModel.eventList.collectAsState()
+    val eventList by aViewModel.eventList.collectAsState()
 
-        LazyColumn {
-            items(eventList) { event ->
-                PhysEventCard(event = event, onClick = { aOnEventSelected(event.id) })
+    Box (
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 100.dp)
+        ) {
+            Text(
+                text = "Select Your Health Alerts",
+                fontSize = 20.sp,
+                modifier = Modifier.padding(bottom = 30.dp)
+            )
+
+            LazyColumn {
+                items(eventList) { event ->
+                    PhysEventCard(event = event, onClick = { aOnEventSelected(event) })
+                }
             }
         }
     }
@@ -51,9 +63,7 @@ fun PhysEventCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        ),
+        colors = CardDefaults.cardColors( containerColor = Color.White ),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Row(
@@ -61,7 +71,7 @@ fun PhysEventCard(
                 .fillMaxWidth()
                 .height(70.dp)
         ) {
-            // Left color bar (like your screenshot)
+            // Left color bar
             Box(
                 modifier = Modifier
                     .width(8.dp)

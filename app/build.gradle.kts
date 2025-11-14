@@ -60,4 +60,5 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.compose.animation:animation:1.6.8")
 }
