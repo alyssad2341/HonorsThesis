@@ -1,6 +1,7 @@
 package com.example.honorsthesisapplication.data.source
 
 import android.content.Context
+import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -33,11 +34,14 @@ class PhoneDataSource : WearableListenerService() {
     }
 
     private fun vibrateWatch(timings: LongArray, amplitudes: IntArray, repeat: Int) {
-        val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-        val vibrator = vibratorManager.defaultVibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager =
+                getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibrator = vibratorManager.defaultVibrator
 
-        val effect = VibrationEffect.createWaveform(timings, amplitudes, repeat)
-        vibrator.vibrate(effect)
+            val effect = VibrationEffect.createWaveform(timings, amplitudes, repeat)
+            vibrator.vibrate(effect)
+        }
     }
 
 }

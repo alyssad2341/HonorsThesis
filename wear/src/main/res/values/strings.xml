@@ -1,8 +1,5 @@
 <resources>
-    <string name="app_name">Wear</string>
-    <!--
-    This string is used for square devices and overridden by hello_world in
-    values-round/strings.xml for round devices.
-    -->
-    <string name="hello_world">From the Square world,\nHello, %1$s!</string>
+    <string name="app_name">HonorsThesisApplication</string>
+    <string name="hello_world">From the Wear OS app, %1$s</string>
+    <string name="heart_rate_channel_name">Heart Rate Monitoring</string>
 </resources>

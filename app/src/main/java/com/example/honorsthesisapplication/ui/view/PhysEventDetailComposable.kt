@@ -30,8 +30,8 @@ fun PhysEventDetailComposable(
 
         Button(onClick = {
             aWatchController.sendMessageToWatch(
-                timings = longArrayOf(0, 300, 100, 300, 100, 600),
-                amplitudes = intArrayOf(0, 255, 0, 255, 0, 255),
+                timings = longArrayOf(50, 50, 50, 50, 50, 100, 350, 25, 25, 25, 25, 200),
+                amplitudes = intArrayOf(33, 51, 75, 113, 170, 255, 0, 38, 62, 100, 160, 255),
                 repeat = -1
             )
         }) {

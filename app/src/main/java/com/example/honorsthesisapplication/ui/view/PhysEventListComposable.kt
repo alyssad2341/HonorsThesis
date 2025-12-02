@@ -81,7 +81,7 @@ fun PhysEventCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Title text
+            // PhysEvent title text
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -94,7 +94,7 @@ fun PhysEventCard(
                 )
             }
 
-            // Right arrow icon
+            // Arrow icon
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Go to details",
