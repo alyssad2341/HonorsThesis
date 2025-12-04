@@ -14,14 +14,16 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.honorsthesisapplication.R
 
+const val TAG = "WatchHeartRateService"
+
 class HeartRateService: Service() {
 
     private lateinit var hrSource: HeartRateDataSource
-    private var threshold: Int = 60
+    private var threshold: Int = 60 //TODO: take in threshold data from user
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("Watch", "HeartRateService started")
+        Log.d(TAG, "HeartRateService started")
 
         createNotificationChannel()
 
@@ -41,7 +43,7 @@ class HeartRateService: Service() {
     }
 
     private fun checkHeartRate(bpm: Int) {
-        Log.d("Watch", "BPM = $bpm")
+        Log.d(TAG, "User BPM = $bpm")
 
         if (bpm > threshold) {
             //vibrate watch
@@ -53,7 +55,7 @@ class HeartRateService: Service() {
                 val effect = VibrationEffect.createOneShot(
                     100,  // duration in ms
                     VibrationEffect.DEFAULT_AMPLITUDE
-                )
+                ) //TODO: Use effect set by user
 
                 vibrator.vibrate(effect)
             }

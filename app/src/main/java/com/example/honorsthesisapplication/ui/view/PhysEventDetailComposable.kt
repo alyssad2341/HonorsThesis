@@ -13,6 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.honorsthesisapplication.data.model.PhysEventModel
 import com.example.honorsthesisapplication.ui.controller.SmartwatchController
+import com.example.honorsthesisapplication.data.model.VibrationModel
+import com.example.honorsthesisapplication.data.model.VibrationPatterns
+
 
 @Composable
 fun PhysEventDetailComposable(
@@ -28,10 +31,12 @@ fun PhysEventDetailComposable(
 
         Spacer(Modifier.height(20.dp))
 
+        val vibration = VibrationPatterns.VIB001
+
         Button(onClick = {
             aWatchController.sendMessageToWatch(
-                timings = longArrayOf(50, 50, 50, 50, 50, 100, 350, 25, 25, 25, 25, 200),
-                amplitudes = intArrayOf(33, 51, 75, 113, 170, 255, 0, 38, 62, 100, 160, 255),
+                timings = vibration.timings,
+                amplitudes = vibration.amplitudes,
                 repeat = -1
             )
         }) {
