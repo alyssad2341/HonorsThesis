@@ -250,7 +250,7 @@ fun PatternItem(
             Spacer(Modifier.height(10.dp))
 
             Button(onClick = onSend) {
-                Text("Send Pattern")
+                Text("Select Pattern")
             }
         }
     }
