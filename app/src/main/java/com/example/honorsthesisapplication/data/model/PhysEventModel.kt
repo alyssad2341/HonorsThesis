@@ -6,5 +6,6 @@ data class PhysEventModel(
     val id: String,
     val title: String,
     val description: String,
-    val color: Color
+    val color: Color,
+    var selectedVibration: VibrationModel? = null
 )
