@@ -44,9 +44,11 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             popExitTransition = { slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) }
         ) {
             PhysEventListComposable(
-                aOnEventSelected = { event ->
-                    theViewModel.selectedEvent = event
-                    theNavController.navigate("phys_event_detail")
+                aOnEventSelected = { subEvent ->
+                    theViewModel.selectedEvent = subEvent
+                    theNavController.navigate("phys_event_detail"){
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -57,12 +59,12 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                 when (initialState.destination.route) {
                     "phys_event_list" ->
                         slideInHorizontally(
-                            initialOffsetX = { it }, // from right
+                            initialOffsetX = { it },
                             animationSpec = tween(300)
                         )
                     "vibration_selection" ->
                         slideInHorizontally(
-                            initialOffsetX = { -it }, // from left
+                            initialOffsetX = { -it },
                             animationSpec = tween(300)
                         )
                     else -> null
@@ -72,12 +74,12 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                 when (targetState.destination.route) {
                     "phys_event_list" ->
                         slideOutHorizontally(
-                            targetOffsetX = { it }, // to right
+                            targetOffsetX = { it },
                             animationSpec = tween(300)
                         )
                     "vibration_selection" ->
                         slideOutHorizontally(
-                            targetOffsetX = { -it }, // to left
+                            targetOffsetX = { -it },
                             animationSpec = tween(300)
                         )
                     else -> null
@@ -87,7 +89,7 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                 when (initialState.destination.route) {
                     "vibration_selection" ->
                         slideInHorizontally(
-                            initialOffsetX = { -it }, // from left
+                            initialOffsetX = { -it },
                             animationSpec = tween(300)
                         )
                     else -> null
@@ -95,7 +97,7 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             },
             popExitTransition = {
                 slideOutHorizontally(
-                    targetOffsetX = { it }, // back to list
+                    targetOffsetX = { it },
                     animationSpec = tween(300)
                 )
             }
@@ -104,7 +106,12 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             theEvent?.let {
                 PhysEventDetailComposable(
                     aEvent = it,
-                    aOnSelectVibration = { theNavController.navigate("vibration_selection") }
+                    aOnSelectVibration = { subevent ->
+                        theViewModel.selectedSubEvent = subevent
+                        theNavController.navigate("vibration_selection"){
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
         }
@@ -116,11 +123,12 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             popEnterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
             popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
         ) {
-            val theEvent = theViewModel.selectedEvent
-            theEvent?.let {
+            val selectedSubEvent = theViewModel.selectedSubEvent
+
+            selectedSubEvent?.let {
                 VibrationSelectionComposable(
                     aWatchController = aWatchController,
-                    aEvent = it,
+                    aSubEvent = it,
                     aOnVibrationSelected = { pattern ->
                         it.selectedVibration = pattern
                     }

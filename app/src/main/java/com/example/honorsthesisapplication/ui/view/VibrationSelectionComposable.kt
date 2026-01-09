@@ -49,6 +49,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.honorsthesisapplication.data.model.PhysEventModel
+import com.example.honorsthesisapplication.data.model.PhysSubEventModel
 import com.example.honorsthesisapplication.ui.controller.SmartwatchController
 import com.example.honorsthesisapplication.data.model.VibrationModel
 import com.example.honorsthesisapplication.data.model.VibrationPatterns
@@ -113,8 +114,8 @@ fun StringDropdown(
 
 @Composable
 fun VibrationSelectionComposable(
-    aEvent: PhysEventModel,
     aWatchController: SmartwatchController,
+    aSubEvent: PhysSubEventModel,
     aOnVibrationSelected: (VibrationModel) -> Unit
 ) {
 
@@ -152,7 +153,7 @@ fun VibrationSelectionComposable(
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Event: ${aEvent.title}", style = MaterialTheme.typography.headlineSmall)
+            Text("Event: ${aSubEvent.title}", style = MaterialTheme.typography.headlineSmall)
 
             Spacer(Modifier.height(20.dp))
 
