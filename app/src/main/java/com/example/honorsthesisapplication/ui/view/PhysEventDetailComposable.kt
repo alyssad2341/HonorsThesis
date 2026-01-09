@@ -51,25 +51,30 @@ fun PhysEventDetailComposable(
     aEvent: PhysEventModel,
     aOnSelectVibration: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .padding(20.dp)
-            .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Box (
+        modifier = Modifier.fillMaxSize()
     ) {
-        Text("Event: ${aEvent.title}", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
-
-        Button(onClick = aOnSelectVibration) {
-            Text("Select vibration alert")
-        }
-
-        aEvent.selectedVibration?.let { vibration ->
-            Spacer(Modifier.height(16.dp))
+        Column(
+            modifier = Modifier.padding(top = 100.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Text(
-                "Selected Pattern: ${vibration.metaphors.joinToString()}",
-                style = MaterialTheme.typography.titleMedium
+                text ="Event: ${aEvent.title}",
+                fontSize = 20.sp,
+                modifier = Modifier.padding(bottom = 30.dp)
             )
+
+            Button(onClick = aOnSelectVibration) {
+                Text("Select vibration alert")
+            }
+
+            aEvent.selectedVibration?.let { vibration ->
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Selected Pattern: ${vibration.metaphors.joinToString()}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
         }
     }
 }

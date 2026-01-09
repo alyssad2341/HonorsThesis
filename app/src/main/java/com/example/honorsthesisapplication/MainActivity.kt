@@ -52,6 +52,64 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
         }
 
         composable(
+            route = "phys_event_detail",
+            enterTransition = {
+                when (initialState.destination.route) {
+                    "phys_event_list" ->
+                        slideInHorizontally(
+                            initialOffsetX = { it }, // from right
+                            animationSpec = tween(300)
+                        )
+                    "vibration_selection" ->
+                        slideInHorizontally(
+                            initialOffsetX = { -it }, // from left
+                            animationSpec = tween(300)
+                        )
+                    else -> null
+                }
+            },
+            exitTransition = {
+                when (targetState.destination.route) {
+                    "phys_event_list" ->
+                        slideOutHorizontally(
+                            targetOffsetX = { it }, // to right
+                            animationSpec = tween(300)
+                        )
+                    "vibration_selection" ->
+                        slideOutHorizontally(
+                            targetOffsetX = { -it }, // to left
+                            animationSpec = tween(300)
+                        )
+                    else -> null
+                }
+            },
+            popEnterTransition = {
+                when (initialState.destination.route) {
+                    "vibration_selection" ->
+                        slideInHorizontally(
+                            initialOffsetX = { -it }, // from left
+                            animationSpec = tween(300)
+                        )
+                    else -> null
+                }
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { it }, // back to list
+                    animationSpec = tween(300)
+                )
+            }
+        ) {
+            val theEvent = theViewModel.selectedEvent
+            theEvent?.let {
+                PhysEventDetailComposable(
+                    aEvent = it,
+                    aOnSelectVibration = { theNavController.navigate("vibration_selection") }
+                )
+            }
+        }
+
+        composable(
             route = "vibration_selection",
             enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
             exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) },
@@ -66,22 +124,6 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                     aOnVibrationSelected = { pattern ->
                         it.selectedVibration = pattern
                     }
-                )
-            }
-        }
-
-        composable(
-            route = "phys_event_detail",
-            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
-            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) },
-            popEnterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
-            popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
-        ) {
-            val theEvent = theViewModel.selectedEvent
-            theEvent?.let {
-                PhysEventDetailComposable(
-                    aEvent = it,
-                    aOnSelectVibration = { theNavController.navigate("vibration_selection") }
                 )
             }
         }

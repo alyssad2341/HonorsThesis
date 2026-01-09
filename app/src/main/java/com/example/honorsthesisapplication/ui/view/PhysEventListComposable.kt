@@ -103,6 +103,8 @@ fun PhysEventCard(
                     .size(28.dp)
                     .align(Alignment.CenterVertically)
             )
+
+            Spacer(modifier = Modifier.width(10.dp))
         }
     }
 }

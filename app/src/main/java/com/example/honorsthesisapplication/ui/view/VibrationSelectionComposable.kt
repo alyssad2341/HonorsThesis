@@ -1,5 +1,6 @@
 package com.example.honorsthesisapplication.ui.view
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,9 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.honorsthesisapplication.data.model.PhysEventModel
@@ -242,12 +250,53 @@ fun PatternItem(
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Metaphors: ${pattern.metaphors.joinToString()}", style = MaterialTheme.typography.titleMedium)
+            //Text("Metaphors: ${pattern.metaphors.joinToString()}", style = MaterialTheme.typography.titleMedium)
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = pattern.imagePath),
+                    contentDescription = "Vibration pattern visualization",
+                    modifier = Modifier
+                        .width(150.dp)
+                        .padding(end = 8.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                Text(
+                    text = "Metaphors: ${pattern.metaphors.joinToString()}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
             Spacer(Modifier.height(6.dp))
 
-            Text("Sensation: ${pattern.sensationTags.joinToString()}")
-            Text("Emotion: ${pattern.emotionTags.joinToString()}")
-            Text("Usage: ${pattern.usageExamples.joinToString()}")
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("Sensation: ")
+                    }
+                    append(pattern.sensationTags.joinToString())
+                }
+            )
+
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("Emotion: ")
+                    }
+                    append(pattern.emotionTags.joinToString())
+                }
+            )
+
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("Usage: ")
+                    }
+                    append(pattern.usageExamples.joinToString())
+                }
+            )
 
             Spacer(Modifier.height(10.dp))
 
