@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -59,10 +60,12 @@ import com.example.honorsthesisapplication.ui.viewmodel.PhysEventViewModel
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 
 
 @Composable
 fun PhysEventDetailComposable(
+    aViewModel: PhysEventViewModel,
     aEvent: PhysEventModel,
     aOnSelectVibration: (PhysSubEventModel) -> Unit
 ) {
@@ -88,9 +91,12 @@ fun PhysEventDetailComposable(
                 modifier = Modifier.padding(bottom = 18.dp)
             )
 
-            LazyColumn {
+            LazyColumn (
+                Modifier.padding(bottom = 50.dp)
+            ) {
                 items(aEvent.subEvents) { subEvent ->
                     PhysSubEventCard(
+                        aViewModel = aViewModel,
                         aEvent = subEvent,
                         aOutlineColor = aEvent.color,
                         aOnEditVibration = { aOnSelectVibration(subEvent) }
@@ -103,6 +109,7 @@ fun PhysEventDetailComposable(
 
 @Composable
 fun PhysSubEventCard(
+    aViewModel: PhysEventViewModel,
     aEvent: PhysSubEventModel,
     aOutlineColor: Color,
     aOnEditVibration: () -> Unit
@@ -111,6 +118,8 @@ fun PhysSubEventCard(
     var enabled by remember { mutableStateOf(aEvent.enabled) }
     var thresholdValue by remember { mutableStateOf(aEvent.threshold ?: 0f) }
     var expanded by remember { mutableStateOf(false) }
+
+    val selectedVibration = VibrationPatterns.getById(aEvent.selectedVibrationId)
 
     val disabledAlpha = if (enabled) 1f else 0.6f
 
@@ -134,6 +143,7 @@ fun PhysSubEventCard(
                     onCheckedChange = {
                         enabled = it
                         aEvent.enabled = it
+                        aViewModel.saveSubEvent(aEvent)
                     }
                 )
 
@@ -148,7 +158,7 @@ fun PhysSubEventCard(
             /* ---------- Body (DIMMABLE) ---------- */
             Column(
                 modifier = Modifier.graphicsLayer {
-                    alpha = if (enabled) 1f else 0.45f
+                    alpha = if (enabled) 1f else disabledAlpha
                 }
             ) {
 
@@ -162,10 +172,12 @@ fun PhysSubEventCard(
                             it.toFloatOrNull()?.let { value ->
                                 thresholdValue = value
                                 aEvent.threshold = value
+                                aViewModel.saveSubEvent(aEvent)
                             }
                         },
                         enabled = enabled,
-                        modifier = Modifier.width(90.dp),
+                        modifier = Modifier
+                            .width(90.dp),
                         singleLine = true
                     )
 
@@ -176,10 +188,13 @@ fun PhysSubEventCard(
                         onValueChange = {
                             thresholdValue = it
                             aEvent.threshold = it
+                            aViewModel.saveSubEvent(aEvent)
                         },
                         enabled = enabled,
                         valueRange = 0f..200f,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .height(24.dp)
+                            .weight(1f)
                     )
                 }
 
@@ -193,27 +208,37 @@ fun PhysSubEventCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Selected Vibration Pattern:")
                         Text(
-                            text = aEvent.selectedVibration
+                            text = selectedVibration
                                 ?.metaphors
                                 ?.joinToString()
                                 ?: "None",
-                            fontSize = 14.sp
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    aEvent.selectedVibration?.let {
+                    Spacer(Modifier.width(5.dp))
+
+                    selectedVibration?.let {
                         androidx.compose.foundation.Image(
                             painter = androidx.compose.ui.res.painterResource(it.imagePath),
                             contentDescription = null,
-                            modifier = Modifier.size(64.dp)
+                            modifier = Modifier.size(100.dp)
                         )
                     }
 
+                    Spacer(Modifier.width(5.dp))
+
                     Button(
                         onClick = aOnEditVibration,
-                        enabled = enabled
+                        enabled = enabled,
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Edit / Update")
+                        Text(
+                            "Edit/Update",
+                            fontSize = 12.sp
+                        )
                     }
                 }
 
@@ -221,6 +246,8 @@ fun PhysSubEventCard(
 
                 /* ---------- Notification Frequency ---------- */
                 Text("Notification Frequency:")
+
+                Spacer(Modifier.height(5.dp))
 
                 Box {
                     Card(
@@ -250,6 +277,7 @@ fun PhysSubEventCard(
                                 onClick = {
                                     aEvent.notificationFrequency = option
                                     expanded = false
+                                    aViewModel.saveSubEvent(aEvent)
                                 }
                             )
                         }

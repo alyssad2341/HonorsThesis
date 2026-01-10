@@ -10,12 +10,14 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.honorsthesisapplication.ui.controller.SmartwatchController
 import com.example.honorsthesisapplication.ui.view.PhysEventDetailComposable
 import com.example.honorsthesisapplication.ui.view.PhysEventListComposable
 import com.example.honorsthesisapplication.ui.view.VibrationSelectionComposable
 import com.example.honorsthesisapplication.ui.viewmodel.PhysEventViewModel
+import com.example.honorsthesisapplication.ui.viewmodel.PhysEventViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +32,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppNavigation(aWatchController: SmartwatchController) {
     val theNavController = rememberNavController()
-    val theViewModel: PhysEventViewModel = viewModel()
+    val context = LocalContext.current
+    val theViewModel: PhysEventViewModel = viewModel(
+        factory = PhysEventViewModelFactory(context)
+    )
 
     NavHost(
         navController = theNavController,
@@ -44,6 +49,7 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             popExitTransition = { slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) }
         ) {
             PhysEventListComposable(
+                aViewModel = theViewModel,
                 aOnEventSelected = { subEvent ->
                     theViewModel.selectedEvent = subEvent
                     theNavController.navigate("phys_event_detail"){
@@ -105,6 +111,7 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
             val theEvent = theViewModel.selectedEvent
             theEvent?.let {
                 PhysEventDetailComposable(
+                    aViewModel = theViewModel,
                     aEvent = it,
                     aOnSelectVibration = { subevent ->
                         theViewModel.selectedSubEvent = subevent
@@ -130,7 +137,8 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                     aWatchController = aWatchController,
                     aSubEvent = it,
                     aOnVibrationSelected = { pattern ->
-                        it.selectedVibration = pattern
+                        it.selectedVibrationId = pattern.id
+                        theViewModel.saveSubEvent(it)
                     }
                 )
             }

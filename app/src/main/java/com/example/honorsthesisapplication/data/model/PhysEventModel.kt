@@ -19,5 +19,5 @@ data class PhysSubEventModel(
     var enabled: Boolean = false,
     var threshold: Float?,
     var notificationFrequency: String,
-    var selectedVibration: VibrationModel? = null
+    var selectedVibrationId: String? = null
 )

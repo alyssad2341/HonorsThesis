@@ -26,7 +26,7 @@ import com.example.honorsthesisapplication.data.model.PhysEventModel
 
 @Composable
 fun PhysEventListComposable(
-    aViewModel: PhysEventViewModel = viewModel(),
+    aViewModel: PhysEventViewModel,
     aOnEventSelected: (PhysEventModel) -> Unit
 ) {
     val eventList by aViewModel.eventList.collectAsState()
