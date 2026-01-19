@@ -227,7 +227,7 @@ fun VibrationSelectionComposable(
                     PatternItem(
                         pattern = pattern,
                         onSend = {
-                            aWatchController.sendMessageToWatch(
+                            aWatchController.sendVibrationToWatch(
                                 timings = pattern.timings,
                                 amplitudes = pattern.amplitudes,
                                 repeat = -1
