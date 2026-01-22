@@ -1,18 +1,15 @@
-/* While this template provides a good starting point for using Wear Compose, you can always
- * take a look at https://github.com/android/wear-os-samples/tree/main/ComposeStarter to find the
- * most up to date changes to the libraries and their usages.
- */
-
 package com.example.honorsthesisapplication
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,19 +21,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
-import androidx.wear.tooling.preview.devices.WearDevices
 import com.example.honorsthesisapplication.data.source.HeartRateService
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
-
         super.onCreate(savedInstanceState)
-
         setTheme(android.R.style.Theme_DeviceDefault)
 
         setContent {
@@ -55,7 +50,9 @@ fun WearApp(greetingName: String) {
     ) {
         TimeText()
         Greeting(greetingName = greetingName)
-        RequestSensorsPermission()
+
+        // This launches the permission flow
+        RequestForegroundServicePermission()
     }
 }
 
@@ -70,27 +67,46 @@ fun Greeting(greetingName: String) {
 }
 
 @Composable
-fun RequestSensorsPermission() {
+fun RequestForegroundServicePermission() {
     val context = LocalContext.current
-    val permission = Manifest.permission.BODY_SENSORS
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted ->
-            if (granted) {
-                val intent = Intent(context, HeartRateService::class.java)
-                context.startForegroundService(intent)
-            }
-        }
+    // API 36 uses granular Health Connect permissions.
+    // Galaxy Watch 7 (API 34/35) uses BODY_SENSORS.
+    val sensorPermission = if (Build.VERSION.SDK_INT >= 36) {
+        "android.permission.health.READ_HEART_RATE"
+    } else {
+        Manifest.permission.BODY_SENSORS
+    }
+
+    val permissions = arrayOf(
+        sensorPermission,
+        Manifest.permission.POST_NOTIFICATIONS
     )
 
-    LaunchedEffect(Unit) {
-        launcher.launch(permission)
-    }
-}
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val sensorGranted = results[sensorPermission] ?: false
+        val notificationsGranted = results[Manifest.permission.POST_NOTIFICATIONS] ?: false
 
-@Preview(device = WearDevices.SMALL_ROUND, showSystemUi = true)
-@Composable
-fun DefaultPreview() {
-    WearApp("Preview Android")
+        if (sensorGranted) {
+            Log.d("MainActivity", "Sensor permission granted. Starting Service...")
+            context.startForegroundService(Intent(context, HeartRateService::class.java))
+        } else {
+            Log.e("MainActivity", "Sensor permission denied. Service cannot track HR.")
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val hasSensor = ContextCompat.checkSelfPermission(context, sensorPermission) == PackageManager.PERMISSION_GRANTED
+        val hasNotifications = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+        if (hasSensor && hasNotifications) {
+            // Permissions already exist, start the service
+            context.startForegroundService(Intent(context, HeartRateService::class.java))
+        } else {
+            // Trigger the system dialogs
+            launcher.launch(permissions)
+        }
+    }
 }

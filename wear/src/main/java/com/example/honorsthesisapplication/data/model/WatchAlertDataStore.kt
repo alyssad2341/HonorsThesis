@@ -6,11 +6,12 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 
-val Context.dataStore by preferencesDataStore(name = "phys_settings")
-object PhysSettingsKeys {
+val Context.watchDataStore by preferencesDataStore(name = "watch_alerts")
 
+object WatchAlertKeys {
     fun enabled(id: String) = booleanPreferencesKey("${id}_enabled")
     fun threshold(id: String) = floatPreferencesKey("${id}_threshold")
     fun frequency(id: String) = stringPreferencesKey("${id}_frequency")
-    fun vibration(id: String) = stringPreferencesKey("${id}_vibration")
+    fun timings(id: String) = stringPreferencesKey("${id}_timings")
+    fun amplitudes(id: String) = stringPreferencesKey("${id}_amplitudes")
 }

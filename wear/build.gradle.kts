@@ -57,6 +57,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    implementation("androidx.datastore:datastore-preferences:1.1.0")
+    implementation("androidx.datastore:datastore-preferences:1.2.0")
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
+    implementation("androidx.health:health-services-client:1.0.0")
 }

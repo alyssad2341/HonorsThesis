@@ -6,90 +6,119 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.VibratorManager
+import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.honorsthesisapplication.R
+import androidx.health.services.client.HealthServices
+import androidx.health.services.client.MeasureCallback
+import androidx.health.services.client.data.Availability
+import androidx.health.services.client.data.DataPointContainer
+import androidx.health.services.client.data.DataType
+import androidx.health.services.client.data.DeltaDataType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 
 const val TAG = "WatchHeartRateService"
 
-class HeartRateService: Service() {
+class HeartRateService : Service() {
 
-    private lateinit var hrSource: HeartRateDataSource
-    private var threshold: Int = 60 //TODO: take in threshold data from user
+    // 1. Use MeasureClient for REAL-TIME data (Passive is for background/infrequent data)
+    private val measureClient by lazy {
+        HealthServices.getClient(this).measureClient
+    }
+
+    private val scope = CoroutineScope(Dispatchers.Default)
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var threshold: Int = 60
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "HeartRateService started")
+        Log.d(TAG, "HeartRateService created")
+
+        // 2. Acquire WakeLock so CPU doesn't sleep when watch is idle
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HonorsThesis:HRWakeLock").apply {
+            acquire()
+        }
 
         createNotificationChannel()
+        startForeground(NOTIFICATION_ID, createNotification())
 
-        val notification = createNotification()
+        // 3. Start real-time measurement
+        registerHeartRateCallback()
+    }
 
-        startForeground(NOTIFICATION_ID, notification)
+    private fun registerHeartRateCallback() {
+        val callback = object : MeasureCallback {
+            override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
+                Log.d(TAG, "Sensor availability changed: $availability")
+            }
 
-        hrSource = HeartRateDataSource(this) { bpm ->
-            checkHeartRate(bpm)
+            override fun onDataReceived(data: DataPointContainer) {
+                // Get the latest heart rate data points
+                val heartRateData = data.getData(DataType.HEART_RATE_BPM)
+                heartRateData.forEach { sample ->
+                    val bpm = sample.value
+                    Log.d(TAG, "REAL-TIME BPM: $bpm")
+                    checkHeartRate(bpm.toInt())
+                }
+            }
         }
-        hrSource.start()
+
+        // Register for real-time heart rate updates
+        measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, callback)
+    }
+
+    private fun checkHeartRate(bpm: Int) {
+        if (bpm > threshold) {
+            vibrateWatch()
+        }
+    }
+
+    private fun vibrateWatch() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator.vibrate(
+                VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
+            )
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        hrSource.stop()
+        // 4. Release WakeLock and stop measurement to save battery
+        wakeLock?.let { if (it.isHeld) it.release() }
+        scope.cancel()
+        Log.d(TAG, "Service destroyed, WakeLock released")
     }
 
-    private fun checkHeartRate(bpm: Int) {
-        Log.d(TAG, "User BPM = $bpm")
-
-        if (bpm > threshold) {
-            //vibrate watch
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager =
-                    getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                val vibrator = vibratorManager.defaultVibrator
-
-                val effect = VibrationEffect.createOneShot(
-                    100,  // duration in ms
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                ) //TODO: Use effect set by user
-
-                vibrator.vibrate(effect)
-            }
-        }
-    }
-    
-    override fun onBind(p0: Intent?): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = getString(R.string.heart_rate_channel_name)
-            val descriptionText = "Channel for heart rate monitoring service"
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            val notificationManager: NotificationManager =
-                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Heart Rate Monitoring",
+                NotificationManager.IMPORTANCE_LOW // Lower importance as it's a silent background task
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Heart Rate Monitoring")
-            .setContentText("Continuously monitoring your heart rate.")
-            .setSmallIcon(R.drawable.ic_heart_rate)
+            .setContentTitle("Real-Time HR Logging")
+            .setContentText("Monitoring vitals for Thesis...")
+            .setSmallIcon(R.drawable.ic_launcher_foreground) // Ensure this icon exists
+            .setOngoing(true)
             .build()
     }
 
     companion object {
-        private const val CHANNEL_ID = "heart_rate_channel"
-        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "hr_monitor_channel"
+        private const val NOTIFICATION_ID = 101
     }
 }
