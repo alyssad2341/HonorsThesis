@@ -16,38 +16,59 @@ import androidx.health.services.client.data.Availability
 import androidx.health.services.client.data.DataPointContainer
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DeltaDataType
+import com.example.honorsthesisapplication.data.model.WatchAlertKeys.amplitudes
+import com.example.honorsthesisapplication.data.model.WatchAlertKeys.timings
+import com.example.honorsthesisapplication.data.model.WatchAlertModel
+import com.example.honorsthesisapplication.data.repository.WatchAlertRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 const val TAG = "WatchHeartRateService"
 
 class HeartRateService : Service() {
 
-    // 1. Use MeasureClient for REAL-TIME data (Passive is for background/infrequent data)
+    private var lastHighAlertTime = 0L
+    private var lastLowAlertTime = 0L
     private val measureClient by lazy {
         HealthServices.getClient(this).measureClient
     }
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private var wakeLock: PowerManager.WakeLock? = null
-    private var threshold: Int = 60
+
+    private lateinit var repo: WatchAlertRepository
+    private var highAlert: WatchAlertModel? = null
+    private var lowAlert: WatchAlertModel? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "HeartRateService created")
 
-        // 2. Acquire WakeLock so CPU doesn't sleep when watch is idle
+        repo = WatchAlertRepository(this)
+
+        // 1. Acquire WakeLock early so CPU stays awake
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HonorsThesis:HRWakeLock").apply {
             acquire()
         }
 
+        // 2. Start foreground notification
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
-        // 3. Start real-time measurement
-        registerHeartRateCallback()
+        // 3. Load alerts asynchronously, then start heart rate callback
+        scope.launch {
+            highAlert = repo.loadAlert("high_heart_rate")
+            lowAlert = repo.loadAlert("low_heart_rate")
+
+            Log.d(TAG, "High alert loaded: $highAlert")
+            Log.d(TAG, "Low alert loaded: $lowAlert")
+
+            // 4. Register the heart rate callback only after alerts are ready
+            registerHeartRateCallback()
+        }
     }
 
     private fun registerHeartRateCallback() {
@@ -72,17 +93,47 @@ class HeartRateService : Service() {
     }
 
     private fun checkHeartRate(bpm: Int) {
-        if (bpm > threshold) {
-            vibrateWatch()
+        val now = System.currentTimeMillis()
+
+        highAlert?.let { alert ->
+            if (alert.enabled && alert.threshold != null && bpm > alert.threshold) {
+                val elapsed = now - lastHighAlertTime
+                Log.d(TAG, "HIGH alert check: elapsed=$elapsed ms, threshold=${alert.threshold}, freq=${alert.frequencyMillis}")
+
+                if (lastHighAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 30_000L)) {
+                    lastHighAlertTime = now
+                    Log.d(TAG, "HIGH alert triggered at $now, BPM: $bpm")
+                    vibrateCustom(alert.timings, alert.amplitudes)
+                }
+            }
+        }
+
+        lowAlert?.let { alert ->
+            if (alert.enabled && alert.threshold != null && bpm < alert.threshold) {
+                val elapsed = now - lastLowAlertTime
+                Log.d(TAG, "LOW alert check: elapsed=$elapsed ms, threshold=${alert.threshold}, freq=${alert.frequencyMillis}")
+
+                if (lastLowAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 30_000L)) {
+                    lastLowAlertTime = now
+                    Log.d(TAG, "LOW alert triggered at $now, BPM: $bpm")
+                    vibrateCustom(alert.timings, alert.amplitudes)
+                }
+            }
         }
     }
 
-    private fun vibrateWatch() {
+    private fun vibrateCustom(timings: LongArray, amplitudes: IntArray) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator.vibrate(
-                VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
+            val vibratorManager =
+                getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+
+            val effect = VibrationEffect.createWaveform(
+                timings,
+                amplitudes,
+                -1
             )
+
+            vibratorManager.defaultVibrator.vibrate(effect)
         }
     }
 

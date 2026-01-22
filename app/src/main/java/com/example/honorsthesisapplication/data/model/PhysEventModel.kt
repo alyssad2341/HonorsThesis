@@ -5,6 +5,14 @@ import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+enum class NotificationFrequency(val label: String, val millis: Long) {
+    EVERY_30_SEC("Every 30 sec", 30_000L),
+    EVERY_1_MIN("Every 1 min", 60_000L),
+    EVERY_5_MIN("Every 5 min", 5 * 60_000L),
+    EVERY_15_MIN("Every 15 min", 15 * 60_000L),
+    EVERY_30_MIN("Every 30 min", 30 * 60_000L)
+}
+
 data class PhysEventModel(
     val id: String,
     val title: String,
@@ -18,6 +26,6 @@ data class PhysSubEventModel(
     val title: String,
     var enabled: Boolean = false,
     var threshold: Float?,
-    var notificationFrequency: String,
+    var notificationFrequency: NotificationFrequency,
     var selectedVibrationId: String? = "VIB000"
 )

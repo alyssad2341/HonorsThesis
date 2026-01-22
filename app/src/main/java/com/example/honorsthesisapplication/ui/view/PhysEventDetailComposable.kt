@@ -61,6 +61,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import com.example.honorsthesisapplication.data.model.NotificationFrequency
 
 
 @Composable
@@ -258,7 +259,7 @@ fun PhysSubEventCard(
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
                         Text(
-                            text = aEvent.notificationFrequency,
+                            text = aEvent.notificationFrequency.label,
                             modifier = Modifier.padding(12.dp)
                         )
                     }
@@ -267,13 +268,9 @@ fun PhysSubEventCard(
                         expanded = expanded && enabled,
                         onDismissRequest = { expanded = false }
                     ) {
-                        listOf(
-                            "Every 30 sec",
-                            "Every 1 min",
-                            "Every 5 min"
-                        ).forEach { option ->
+                        NotificationFrequency.entries.forEach { option ->
                             DropdownMenuItem(
-                                text = { Text(option) },
+                                text = { Text(option.label) },
                                 onClick = {
                                     aEvent.notificationFrequency = option
                                     expanded = false

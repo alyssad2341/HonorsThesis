@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2025-12-05T23:22:17.058894800Z">
+        <DropdownSelection timestamp="2026-01-22T08:02:50.397070700Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=RFAY80LG2VN" />
+              <DeviceId pluginId="Default" identifier="serial=172.20.10.3:35039;connection=62e4d39a" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -15,10 +15,10 @@
       </SelectionState>
       <SelectionState runConfigName="wear">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-01-19T03:42:41.077319600Z">
+        <DropdownSelection timestamp="2026-01-22T08:02:54.999308100Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=RFAY80LG2VN" />
+              <DeviceId pluginId="Default" identifier="serial=172.20.10.3:35039;connection=62e4d39a" />
             </handle>
           </Target>
         </DropdownSelection>

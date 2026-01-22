@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.honorsthesisapplication.data.model.NotificationFrequency
 import com.example.honorsthesisapplication.data.model.PhysEventModel
 import com.example.honorsthesisapplication.data.model.PhysSubEventModel
 import com.example.honorsthesisapplication.data.repository.PhysSettingsRepository
@@ -18,8 +19,8 @@ class PhysEventViewModel(context: Context) : ViewModel() {
 
     private val _heartRateSubList = MutableStateFlow(
         listOf(
-            PhysSubEventModel("high_heart_rate","High Heart Rate", false,  150.0f, "Every 5 minutes"),
-            PhysSubEventModel("low_heart_rate", "Low Heart Rate", false, 60.0f, "Every 5 minutes")
+            PhysSubEventModel("high_heart_rate","High Heart Rate", false,  150.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_heart_rate", "Low Heart Rate", false, 60.0f, NotificationFrequency.EVERY_5_MIN)
         )
     )
 

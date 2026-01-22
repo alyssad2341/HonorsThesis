@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.honorsthesisapplication.data.model.WatchAlertModel
 import kotlinx.coroutines.flow.first
 import androidx.datastore.preferences.core.edit
+import com.example.honorsthesisapplication.data.model.NotificationFrequency
 import com.example.honorsthesisapplication.data.model.WatchAlertKeys
 import com.example.honorsthesisapplication.data.model.VibrationModel
 import com.example.honorsthesisapplication.data.model.watchDataStore
@@ -16,7 +17,7 @@ class WatchAlertRepository(private val context: Context) {
         id: String,
         enabled: Boolean,
         threshold: Double,
-        frequency: String,
+        frequency: Long,
         timings: String,
         amplitudes: String
     ) {
@@ -52,8 +53,7 @@ class WatchAlertRepository(private val context: Context) {
             subEventId = subEventId,
             enabled = enabled,
             threshold = prefs[WatchAlertKeys.threshold(subEventId)],
-            notificationFrequency =
-                prefs[WatchAlertKeys.frequency(subEventId)] ?: "Every 5 min",
+            frequencyMillis = NotificationFrequency.EVERY_5_MIN.millis,
             timings = timings,
             amplitudes = amplitudes
         )

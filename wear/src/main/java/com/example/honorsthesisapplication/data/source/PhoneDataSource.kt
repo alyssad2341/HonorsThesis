@@ -49,7 +49,7 @@ class PhoneDataSource : WearableListenerService() {
                     .takeIf { it >= 0 }
                     ?.toFloat()
 
-                val frequency = obj.getString("notificationFrequency")
+                val frequencyMillis = obj.getLong("notificationFrequency")
 
                 val vibrationObj = obj.getJSONObject("vibration")
                 val timingsJson = vibrationObj.getJSONArray("timings")
@@ -67,7 +67,7 @@ class PhoneDataSource : WearableListenerService() {
                     subEventId = id,
                     enabled = enabled,
                     threshold = threshold,
-                    notificationFrequency = frequency,
+                    frequencyMillis = frequencyMillis,
                     timings = timings,
                     amplitudes = amplitudes
                 )
@@ -79,7 +79,7 @@ class PhoneDataSource : WearableListenerService() {
                         id = alert.subEventId,
                         enabled = alert.enabled,
                         threshold = alert.threshold?.toDouble() ?: -1.0,
-                        frequency = alert.notificationFrequency,
+                        frequency = alert.frequencyMillis,
                         timings = alert.timings.joinToString(","),
                         amplitudes = alert.amplitudes.joinToString(",")
                     )
