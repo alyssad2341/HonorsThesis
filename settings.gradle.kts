@@ -20,5 +20,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "HonorsThesisApplication"
+include(":wear:samsung-health-lib")
 include(":app")
 include(":wear")

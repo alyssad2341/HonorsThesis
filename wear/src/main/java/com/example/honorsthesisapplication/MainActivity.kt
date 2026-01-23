@@ -26,6 +26,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import com.example.honorsthesisapplication.data.source.ActivityService
 import com.example.honorsthesisapplication.data.source.HeartRateService
 
 class MainActivity : ComponentActivity() {
@@ -34,9 +35,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setTheme(android.R.style.Theme_DeviceDefault)
 
-        setContent {
-            WearApp("Android")
-        }
+        setContent { WearApp("Android") }
     }
 }
 
@@ -50,9 +49,7 @@ fun WearApp(greetingName: String) {
     ) {
         TimeText()
         Greeting(greetingName = greetingName)
-
-        // This launches the permission flow
-        RequestForegroundServicePermission()
+        RequestPermissionsAndStartServices()
     }
 }
 
@@ -67,45 +64,91 @@ fun Greeting(greetingName: String) {
 }
 
 @Composable
-fun RequestForegroundServicePermission() {
+fun RequestPermissionsAndStartServices() {
     val context = LocalContext.current
 
-    // API 36 uses granular Health Connect permissions.
-    // Galaxy Watch 7 (API 34/35) uses BODY_SENSORS.
-    val sensorPermission = if (Build.VERSION.SDK_INT >= 36) {
-        "android.permission.health.READ_HEART_RATE"
-    } else {
-        Manifest.permission.BODY_SENSORS
+    fun startStepsService() {
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, ActivityService::class.java)
+        )
+        Log.d("MainActivity", "Started ActivityService (steps)")
     }
 
-    val permissions = arrayOf(
-        sensorPermission,
-        Manifest.permission.POST_NOTIFICATIONS
-    )
+    fun startHeartRateService() {
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, HeartRateService::class.java)
+        )
+        Log.d("MainActivity", "Started HeartRateService (HR)")
+    }
+
+    // Only runtime permissions we truly need here
+    val permissions = buildList {
+        add(Manifest.permission.ACTIVITY_RECOGNITION) // steps sensor access
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        // Optional: keep this if you want, but don't let it block steps.
+        add("android.permission.health.READ_HEART_RATE")
+    }.toTypedArray()
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val sensorGranted = results[sensorPermission] ?: false
-        val notificationsGranted = results[Manifest.permission.POST_NOTIFICATIONS] ?: false
 
-        if (sensorGranted) {
-            Log.d("MainActivity", "Sensor permission granted. Starting Service...")
-            context.startForegroundService(Intent(context, HeartRateService::class.java))
+        val stepsGranted = results[Manifest.permission.ACTIVITY_RECOGNITION] == true
+
+        val notificationsGranted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                results[Manifest.permission.POST_NOTIFICATIONS] == true
+            else true
+
+        val hrGranted = results["android.permission.health.READ_HEART_RATE"] == true
+
+        // Start what we can
+        if (stepsGranted) startStepsService() else Log.e("MainActivity", "Steps permission denied.")
+        if (notificationsGranted) {
+            // nothing to start; just means alerts can show
         } else {
-            Log.e("MainActivity", "Sensor permission denied. Service cannot track HR.")
+            Log.e("MainActivity", "Notification permission denied (alerts may not show).")
         }
+
+        // HR: only start if granted (or you can start regardless if it works on your watch)
+        if (hrGranted) startHeartRateService()
+        else Log.e("MainActivity", "HR permission denied (HR service not started).")
+
+        Log.d("MainActivity", "Permission results: $results")
     }
 
     LaunchedEffect(Unit) {
-        val hasSensor = ContextCompat.checkSelfPermission(context, sensorPermission) == PackageManager.PERMISSION_GRANTED
-        val hasNotifications = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val stepsGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACTIVITY_RECOGNITION
+        ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasSensor && hasNotifications) {
-            // Permissions already exist, start the service
-            context.startForegroundService(Intent(context, HeartRateService::class.java))
-        } else {
-            // Trigger the system dialogs
+        val notificationsGranted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else true
+
+        val hrGranted = ContextCompat.checkSelfPermission(
+            context,
+            "android.permission.health.READ_HEART_RATE"
+        ) == PackageManager.PERMISSION_GRANTED
+
+        // Start services that are already allowed
+        if (stepsGranted) startStepsService()
+        if (hrGranted) startHeartRateService()
+
+        // If anything is missing that we care about, request all at once.
+        // (steps is the important one; notifications/hr are secondary)
+        if (!stepsGranted || !notificationsGranted || !hrGranted) {
             launcher.launch(permissions)
         }
     }
