@@ -124,6 +124,7 @@ class HeartRateService : Service() {
                     lastHighAlertTime = now
                     Log.d(TAG, "HIGH alert triggered at $now, BPM: $bpm")
                     vibrateCustom(alert.timings, alert.amplitudes)
+                    showHeartRateAlert("High Heart Rate Alert!", "BPM: $bpm")
                 }
             }
         }
@@ -135,6 +136,7 @@ class HeartRateService : Service() {
                     lastLowAlertTime = now
                     Log.d(TAG, "LOW alert triggered at $now, BPM: $bpm")
                     vibrateCustom(alert.timings, alert.amplitudes)
+                    showHeartRateAlert("Low Heart Rate Alert!", "BPM: $bpm")
                 }
             }
         }
@@ -206,7 +208,7 @@ class HeartRateService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Heart Rate Monitoring",
-            NotificationManager.IMPORTANCE_LOW // Lower importance as it's a silent background task
+            NotificationManager.IMPORTANCE_HIGH // Lower importance as it's a silent background task
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
@@ -228,7 +230,8 @@ class HeartRateService : Service() {
             .setContentText("Tracking vitals in background...")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT) // Critical for Health Services priority
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
@@ -248,6 +251,33 @@ class HeartRateService : Service() {
         ongoingActivity.apply(applicationContext)
 
         return builder.build()
+    }
+
+    private fun showHeartRateAlert(title: String, message: String) {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+
+        // Create the Intent for the Acknowledge button
+        val ackIntent = Intent(this, AlertReceiver::class.java).apply {
+            action = "ACTION_ACKNOWLEDGE"
+            putExtra("alert_type", title)
+        }
+        val ackPendingIntent = PendingIntent.getBroadcast(
+            this, 0, ackIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Build the Alert Notification
+        val alertNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_MAX) // Makes it pop up (heads-up)
+            .setAutoCancel(true)
+            .setTimeoutAfter(20000L) // MAKE IT GO AWAY AFTER 20 SECONDS
+            .addAction(R.drawable.ic_launcher_foreground, "Acknowledge", ackPendingIntent) // THE BUTTON
+            .build()
+
+        // Issue the notification (Use a different ID than the foreground service!)
+        notificationManager.notify(202, alertNotification)
     }
 
     companion object {

@@ -33,6 +33,12 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
 
+        <receiver android:name=".data.source.AlertReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="ACTION_ACKNOWLEDGE" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".data.source.HeartRateService"
             android:exported="false"
