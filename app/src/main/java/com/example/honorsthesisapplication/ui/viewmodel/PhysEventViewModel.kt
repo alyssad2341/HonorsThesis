@@ -24,7 +24,15 @@ class PhysEventViewModel(context: Context) : ViewModel() {
         )
     )
 
+    private val _activitySubList = MutableStateFlow(
+        listOf(
+            PhysSubEventModel("high_activity","High Activity", false,  150.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_activity", "Low Activity", false, 60.0f, NotificationFrequency.EVERY_5_MIN)
+        )
+    )
+
     val heartRateSubList = _heartRateSubList.asStateFlow()
+    val activitySubList = _activitySubList.asStateFlow()
 
     init {
         preloadSavedSettings()
@@ -32,15 +40,25 @@ class PhysEventViewModel(context: Context) : ViewModel() {
 
     private fun preloadSavedSettings() {
         viewModelScope.launch {
-            val updatedList = _heartRateSubList.value.map { subEvent ->
+            // Load saved heart rate subevent settings
+            val loadedHeartRateSubs = _heartRateSubList.value.map { subEvent ->
                 repository.loadSubEventSettings(subEvent)
             }
-            _heartRateSubList.value = updatedList
+            _heartRateSubList.value = loadedHeartRateSubs
 
+            // Load saved activity subevent settings
+            val loadedActivitySubs = _activitySubList.value.map { subEvent ->
+                repository.loadSubEventSettings(subEvent)
+            }
+            _activitySubList.value = loadedActivitySubs
+
+            // Push both updated subevent lists into the event list
             _eventList.value = _eventList.value.map { event ->
-                if (event.id == "heart_rate") {
-                    event.copy(subEvents = updatedList)
-                } else event
+                when (event.id) {
+                    "heart_rate" -> event.copy(subEvents = loadedHeartRateSubs)
+                    "activity" -> event.copy(subEvents = loadedActivitySubs)
+                    else -> event
+                }
             }
         }
     }
@@ -48,7 +66,7 @@ class PhysEventViewModel(context: Context) : ViewModel() {
     private val _eventList = MutableStateFlow(
         listOf(
             PhysEventModel("heart_rate","Heart Rate", "Description", AlertColors.HeartRate, heartRateSubList.value),
-            PhysEventModel("activity", "Activity", "Description", AlertColors.Activity),
+            PhysEventModel("activity", "Activity", "Description", AlertColors.Activity, activitySubList.value),
             PhysEventModel("stress", "Stress", "Description", AlertColors.Stress),
             PhysEventModel("blood_oxygen", "Blood Oxygen", "Description", AlertColors.BloodOxygen),
             PhysEventModel("skin_temp", "Skin Temperature", "Description", AlertColors.SkinTemperature),
