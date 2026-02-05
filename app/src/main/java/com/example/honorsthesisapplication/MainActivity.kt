@@ -12,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.honorsthesisapplication.data.model.VibrationPatterns
 import com.example.honorsthesisapplication.ui.controller.SmartwatchController
 import com.example.honorsthesisapplication.ui.view.PhysEventDetailComposable
 import com.example.honorsthesisapplication.ui.view.PhysEventListComposable
@@ -22,6 +23,7 @@ import com.example.honorsthesisapplication.ui.viewmodel.PhysEventViewModelFactor
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VibrationPatterns.init(this)
         val theWatchController = SmartwatchController(this)
         setContent {
             MainAppNavigation(aWatchController = theWatchController)
@@ -118,6 +120,9 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                         theNavController.navigate("vibration_selection"){
                             launchSingleTop = true
                         }
+                    },
+                    aOnBack = {
+                        theNavController.popBackStack() // goes back to PhysEventListComposable
                     }
                 )
             }
@@ -139,6 +144,9 @@ fun MainAppNavigation(aWatchController: SmartwatchController) {
                     aOnVibrationSelected = { pattern ->
                         it.selectedVibrationId = pattern.id
                         theViewModel.saveSubEvent(it)
+                    },
+                    aOnBack = {
+                        theNavController.popBackStack() // goes back to PhysEventDetailComposable
                     }
                 )
             }

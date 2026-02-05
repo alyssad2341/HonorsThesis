@@ -37,7 +37,7 @@ class PhysSettingsRepository(private val context: Context) {
                     prefs[PhysSettingsKeys.frequency(subEvent.id)]
                         ?: NotificationFrequency.EVERY_5_MIN.name
                 ),
-            selectedVibrationId = prefs[PhysSettingsKeys.vibration(subEvent.id)] ?: VibrationPatterns.VIB000.id
+            selectedVibrationId = prefs[PhysSettingsKeys.vibration(subEvent.id)] ?: "VIB000"
         )
     }
 }

@@ -17,19 +17,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,11 +117,13 @@ fun StringDropdown(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VibrationSelectionComposable(
     aWatchController: SmartwatchController,
     aSubEvent: PhysSubEventModel,
-    aOnVibrationSelected: (VibrationModel) -> Unit
+    aOnVibrationSelected: (VibrationModel) -> Unit,
+    aOnBack: () -> Unit
 ) {
 
     val allPatterns = VibrationPatterns.all
@@ -145,7 +152,22 @@ fun VibrationSelectionComposable(
                     (selectedUsage == null || selectedUsage in pattern.usageExamples)
         }
     }
-    Scaffold() { innerPadding ->
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Event: ${aSubEvent.title}", style = MaterialTheme.typography.headlineSmall) },
+                navigationIcon = {
+                    IconButton(onClick = aOnBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors()
+            )
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -153,9 +175,8 @@ fun VibrationSelectionComposable(
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Event: ${aSubEvent.title}", style = MaterialTheme.typography.headlineSmall)
 
-            Spacer(Modifier.height(20.dp))
+            //Spacer(Modifier.height(20.dp))
 
             //--------------------------------------------
             // FILTER DROPDOWNS

@@ -61,47 +61,64 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import com.example.honorsthesisapplication.data.model.NotificationFrequency
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhysEventDetailComposable(
     aViewModel: PhysEventViewModel,
     aEvent: PhysEventModel,
-    aOnSelectVibration: (PhysSubEventModel) -> Unit
+    aOnSelectVibration: (PhysSubEventModel) -> Unit,
+    aOnBack: () -> Unit
 ) {
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(text = aEvent.title) },
+                navigationIcon = {
+                    IconButton(onClick = aOnBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors()
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .padding(innerPadding)
         ) {
-
-            Text(
-                text = "Event: ${aEvent.title}",
-                fontSize = 20.sp,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            Text(
-                text = "Set Your Custom Vibration Alerts!",
-                fontSize = 16.sp,
-                modifier = Modifier.padding(bottom = 18.dp)
-            )
-
-            LazyColumn (
-                Modifier.padding(bottom = 50.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                items(aEvent.subEvents) { subEvent ->
-                    PhysSubEventCard(
-                        aViewModel = aViewModel,
-                        aEvent = subEvent,
-                        aOutlineColor = aEvent.color,
-                        aOnEditVibration = { aOnSelectVibration(subEvent) }
-                    )
+
+                Text(
+                    text = "Set Your Custom Vibration Alerts!",
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 18.dp)
+                )
+
+                LazyColumn(
+                    Modifier.padding(bottom = 50.dp)
+                ) {
+                    items(aEvent.subEvents) { subEvent ->
+                        PhysSubEventCard(
+                            aViewModel = aViewModel,
+                            aEvent = subEvent,
+                            aOutlineColor = aEvent.color,
+                            aOnEditVibration = { aOnSelectVibration(subEvent) }
+                        )
+                    }
                 }
             }
         }
