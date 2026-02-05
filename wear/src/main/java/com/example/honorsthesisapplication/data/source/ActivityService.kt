@@ -18,6 +18,8 @@ import com.example.honorsthesisapplication.data.model.WatchAlertModel
 import com.example.honorsthesisapplication.data.repository.WatchAlertRepository
 import kotlinx.coroutines.*
 import java.util.ArrayDeque
+import kotlin.math.max
+import kotlin.math.min
 
 private const val ACTIVITYTAG = "WatchActivityService"
 
@@ -25,6 +27,9 @@ class ActivityService : Service(), SensorEventListener {
 
     private var lastHighAlertTime = 0L
     private var lastLowAlertTime = 0L
+
+    // Periodic evaluation interval
+    private val CHECK_INTERVAL_MILLIS = 30_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLock: PowerManager.WakeLock? = null
@@ -73,6 +78,7 @@ class ActivityService : Service(), SensorEventListener {
 
         // Register step sensor listener
         registerStepSensors()
+        startPeriodicChecks()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -141,6 +147,22 @@ class ActivityService : Service(), SensorEventListener {
         checkActivityLevel(stepsLastHour.toInt())
     }
 
+    private fun startPeriodicChecks() {
+        scope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                resetWindow(now)
+
+                val stepsLastHour = stepWindow.sumOf { it.second }.toInt()
+                Log.d(ACTIVITYTAG, "[PERIODIC] stepsLastHour=$stepsLastHour")
+
+                checkActivityLevel(stepsLastHour)
+
+                delay(CHECK_INTERVAL_MILLIS)
+            }
+        }
+    }
+
     private fun resetWindow(now: Long) {
         while (stepWindow.isNotEmpty() && now - stepWindow.first().first > WINDOW_MILLIS) {
             stepWindow.removeFirst()
@@ -151,11 +173,14 @@ class ActivityService : Service(), SensorEventListener {
         val now = System.currentTimeMillis()
 
         highAlert?.let { alert ->
-            if (alert.enabled && alert.threshold != null && stepsLastHour > alert.threshold) {
+            val threshold = alert.threshold
+            if (alert.enabled && threshold != null && stepsLastHour > threshold) {
+                val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
                 val elapsed = now - lastHighAlertTime
-                if (lastHighAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 60_000L)) {
+
+                if (lastHighAlertTime == 0L || elapsed >= cooldown) {
                     lastHighAlertTime = now
-                    Log.d(ACTIVITYTAG, "HIGH activity alert triggered")
+                    Log.d(ACTIVITYTAG, "HIGH activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
                     showActivityAlert("High Activity Alert!", "Steps last hour: $stepsLastHour")
                 }
@@ -163,11 +188,14 @@ class ActivityService : Service(), SensorEventListener {
         }
 
         lowAlert?.let { alert ->
-            if (alert.enabled && alert.threshold != null && stepsLastHour < alert.threshold) {
+            val threshold = alert.threshold
+            if (alert.enabled && threshold != null && stepsLastHour < threshold) {
+                val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
                 val elapsed = now - lastLowAlertTime
-                if (lastLowAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 60_000L)) {
+
+                if (lastLowAlertTime == 0L || elapsed >= cooldown) {
                     lastLowAlertTime = now
-                    Log.d(ACTIVITYTAG, "LOW activity alert triggered")
+                    Log.d(ACTIVITYTAG, "LOW activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
                     showActivityAlert("Low Activity Alert!", "Steps last hour: $stepsLastHour")
                 }
@@ -210,7 +238,7 @@ class ActivityService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        sensorManager.unregisterListener(this)
+        if (::sensorManager.isInitialized) sensorManager.unregisterListener(this)
         wakeLock?.let { if (it.isHeld) it.release() }
         scope.cancel()
         Log.d(ACTIVITYTAG, "ActivityService destroyed")
