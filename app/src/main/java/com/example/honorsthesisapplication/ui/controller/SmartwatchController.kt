@@ -49,7 +49,7 @@ class SmartwatchController (private val context: Context) {
             {
                 "subEventId": "${subEvent.id}",
                 "enabled": ${subEvent.enabled},
-                "threshold": ${subEvent.threshold},
+                "threshold": ${subEvent.setThreshold},
                 "notificationFrequency": ${subEvent.notificationFrequency.millis},
                 "vibration": {
                     "timings": ${timings.joinToString(prefix = "[", postfix = "]")},

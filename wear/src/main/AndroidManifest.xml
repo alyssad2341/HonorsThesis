@@ -52,6 +52,11 @@
             android:foregroundServiceType="health" />
 
         <service
+            android:name=".data.source.HRVService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <service
             android:name=".data.source.ActivityService"
             android:enabled="true"
             android:exported="false"

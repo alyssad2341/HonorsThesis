@@ -19,20 +19,28 @@ class PhysEventViewModel(context: Context) : ViewModel() {
 
     private val _heartRateSubList = MutableStateFlow(
         listOf(
-            PhysSubEventModel("high_heart_rate","High Heart Rate", false,  150.0f, NotificationFrequency.EVERY_5_MIN),
-            PhysSubEventModel("low_heart_rate", "Low Heart Rate", false, 60.0f, NotificationFrequency.EVERY_5_MIN)
+            PhysSubEventModel("high_heart_rate","High Heart Rate", "Alert when BPM rises above this value.", false,  90.0f, 160.0f, 120.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_heart_rate", "Low Heart Rate", "Alert when BPM falls below this value.", false, 35.0f, 70.0f, 50.0f, NotificationFrequency.EVERY_5_MIN)
         )
     )
 
     private val _activitySubList = MutableStateFlow(
         listOf(
-            PhysSubEventModel("high_activity","High Activity", false,  150.0f, NotificationFrequency.EVERY_5_MIN),
-            PhysSubEventModel("low_activity", "Low Activity", false, 60.0f, NotificationFrequency.EVERY_5_MIN)
+            PhysSubEventModel("high_activity","High Activity", "Alert when steps in the last hour exceed this value.", false, 700.0f, 4000.0f, 2000.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_activity", "Low Activity", "Alert when steps in the last hour fall below this value.", false, 0.0f, 300.0f, 60.0f, NotificationFrequency.EVERY_5_MIN)
+        )
+    )
+
+    private val _stressSubList = MutableStateFlow(
+        listOf(
+            PhysSubEventModel("high_stress","High Stress", "Alert when heart rate variability falls below this value.", false,  1.0f, 4.5f, 3.5f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_stress", "Low Stress", "Alert when heart rate variability exceeds this value.", false, 5.9f, 10.0f, 7.5f, NotificationFrequency.EVERY_5_MIN)
         )
     )
 
     val heartRateSubList = _heartRateSubList.asStateFlow()
     val activitySubList = _activitySubList.asStateFlow()
+    val stressSubList = _stressSubList.asStateFlow()
 
     init {
         preloadSavedSettings()
@@ -52,11 +60,18 @@ class PhysEventViewModel(context: Context) : ViewModel() {
             }
             _activitySubList.value = loadedActivitySubs
 
+            // Load saved stress subevent settings
+            val loadedStressSubs = _stressSubList.value.map { subEvent ->
+                repository.loadSubEventSettings(subEvent)
+            }
+            _stressSubList.value = loadedActivitySubs
+
             // Push both updated subevent lists into the event list
             _eventList.value = _eventList.value.map { event ->
                 when (event.id) {
                     "heart_rate" -> event.copy(subEvents = loadedHeartRateSubs)
                     "activity" -> event.copy(subEvents = loadedActivitySubs)
+                    "stress" -> event.copy(subEvents = loadedStressSubs)
                     else -> event
                 }
             }
@@ -68,8 +83,6 @@ class PhysEventViewModel(context: Context) : ViewModel() {
             PhysEventModel("heart_rate","Heart Rate", "Description", AlertColors.HeartRate, heartRateSubList.value),
             PhysEventModel("activity", "Activity", "Description", AlertColors.Activity, activitySubList.value),
             PhysEventModel("stress", "Stress", "Description", AlertColors.Stress),
-            PhysEventModel("blood_oxygen", "Blood Oxygen", "Description", AlertColors.BloodOxygen),
-            PhysEventModel("skin_temp", "Skin Temperature", "Description", AlertColors.SkinTemperature),
         )
     )
     val eventList = _eventList.asStateFlow()

@@ -120,7 +120,7 @@ class HeartRateService : Service() {
         highAlert?.let { alert ->
             if (alert.enabled && alert.threshold != null && bpm > alert.threshold) {
                 val elapsed = now - lastHighAlertTime
-                if (lastHighAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 30000L)) {
+                if (lastHighAlertTime == 0L || elapsed >= (alert.frequencyMillis)) {
                     lastHighAlertTime = now
                     Log.d(TAG, "HIGH alert triggered at $now, BPM: $bpm")
                     vibrateCustom(alert.timings, alert.amplitudes)
@@ -132,7 +132,7 @@ class HeartRateService : Service() {
         lowAlert?.let { alert ->
             if (alert.enabled && alert.threshold != null && bpm < alert.threshold) {
                 val elapsed = now - lastLowAlertTime
-                if (lastLowAlertTime == 0L || elapsed >= (alert.frequencyMillis ?: 30000L)) {
+                if (lastLowAlertTime == 0L || elapsed >= (alert.frequencyMillis)) {
                     lastLowAlertTime = now
                     Log.d(TAG, "LOW alert triggered at $now, BPM: $bpm")
                     vibrateCustom(alert.timings, alert.amplitudes)

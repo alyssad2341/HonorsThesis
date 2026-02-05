@@ -16,7 +16,7 @@ class PhysSettingsRepository(private val context: Context) {
     suspend fun saveSubEventSettings(subEvent: PhysSubEventModel) {
         context.dataStore.edit { prefs ->
             prefs[PhysSettingsKeys.enabled(subEvent.id)] = subEvent.enabled
-            subEvent.threshold?.let { prefs[PhysSettingsKeys.threshold(subEvent.id)] = it }
+            subEvent.setThreshold.let { prefs[PhysSettingsKeys.threshold(subEvent.id)] = it }
             prefs[PhysSettingsKeys.frequency(subEvent.id)] =
                 subEvent.notificationFrequency.name
             subEvent.selectedVibrationId?.let {
@@ -31,7 +31,7 @@ class PhysSettingsRepository(private val context: Context) {
         val prefs = context.dataStore.data.first()
         return subEvent.copy(
             enabled = prefs[PhysSettingsKeys.enabled(subEvent.id)] ?: false,
-            threshold = prefs[PhysSettingsKeys.threshold(subEvent.id)],
+            setThreshold = prefs[PhysSettingsKeys.threshold(subEvent.id)] ?: subEvent.setThreshold,
             notificationFrequency =
                 NotificationFrequency.valueOf(
                     prefs[PhysSettingsKeys.frequency(subEvent.id)]

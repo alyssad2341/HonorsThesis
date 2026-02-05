@@ -24,8 +24,11 @@ data class PhysEventModel(
 data class PhysSubEventModel(
     val id: String,
     val title: String,
+    val description: String,
     var enabled: Boolean = false,
-    var threshold: Float?,
+    var minThreshold: Float,
+    var maxThreshold: Float,
+    var setThreshold: Float,
     var notificationFrequency: NotificationFrequency,
     var selectedVibrationId: String? = "VIB000"
 )
