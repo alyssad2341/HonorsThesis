@@ -47,6 +47,8 @@ private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
 private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
 private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
 
+private const val ACTION_ALERT_TRIGGERED = "ACTION_ALERT_TRIGGERED"
+
 class ActivityService : Service(), SensorEventListener {
 
     private var lastHighAlertTime = 0L
@@ -345,6 +347,13 @@ class ActivityService : Service(), SensorEventListener {
 
         val alertId = "activity_${System.currentTimeMillis()}"
         val requestCode = (System.currentTimeMillis() and 0x7FFFFFFF).toInt()
+
+        sendBroadcast(Intent(ACTION_ALERT_TRIGGERED).apply {
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
+        })
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             action = ACTION_OPEN_ALERT_SURVEY

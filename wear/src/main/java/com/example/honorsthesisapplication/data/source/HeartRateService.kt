@@ -48,6 +48,8 @@ private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
 private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
 private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
 
+private const val ACTION_ALERT_TRIGGERED = "ACTION_ALERT_TRIGGERED"
+
 class HeartRateService : Service() {
 
     private var lastHighAlertTime = 0L
@@ -287,11 +289,6 @@ class HeartRateService : Service() {
         return builder.build()
     }
 
-    /**
-     * Notification should NOT reveal what the alert was.
-     * Extras still carry the truth for grading in MainActivity.
-     * Uses unique notificationId + unique requestCode to prevent stale extras.
-     */
     private fun showHealthAlertNotification(
         actualKey: String,
         actualValue: Double,
@@ -302,6 +299,13 @@ class HeartRateService : Service() {
         val now = System.currentTimeMillis()
         val notificationId = (now % Int.MAX_VALUE).toInt()
         val alertId = "hr_$now"
+
+        sendBroadcast(Intent(ACTION_ALERT_TRIGGERED).apply {
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
+        })
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             action = ACTION_OPEN_ALERT_SURVEY

@@ -55,6 +55,8 @@ private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
 private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
 private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
 
+private const val ACTION_ALERT_TRIGGERED = "ACTION_ALERT_TRIGGERED"
+
 class CaloriesService : Service() {
 
     private var lastHighCalAlertTime = 0L
@@ -473,6 +475,13 @@ class CaloriesService : Service() {
         val now = System.currentTimeMillis()
         val notificationId = (now % Int.MAX_VALUE).toInt()
         val alertId = "calories_$now"
+
+        sendBroadcast(Intent(ACTION_ALERT_TRIGGERED).apply {
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
+        })
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             action = ACTION_OPEN_ALERT_SURVEY

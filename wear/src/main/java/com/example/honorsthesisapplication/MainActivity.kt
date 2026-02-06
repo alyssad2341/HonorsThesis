@@ -1,7 +1,11 @@
 package com.example.honorsthesisapplication
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -11,18 +15,39 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.wear.compose.material.*
-import androidx.wear.compose.material.rememberScalingLazyListState
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.OutlinedButton
+import androidx.wear.compose.material.PositionIndicator
+import androidx.wear.compose.material.Scaffold
+import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.TimeText
 import com.example.honorsthesisapplication.data.source.ActivityService
 import com.example.honorsthesisapplication.data.source.CaloriesService
 import com.example.honorsthesisapplication.data.source.HRVService
@@ -37,15 +62,53 @@ private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
 private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
 private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
 
+private const val ACTION_ALERT_TRIGGERED = "ACTION_ALERT_TRIGGERED"
+
 class MainActivity : ComponentActivity() {
 
     private val alertIntentState = mutableStateOf<Intent?>(null)
+
+    // Receives "alert happened" broadcasts while app is open and flips UI to survey
+    private val alertBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_ALERT_TRIGGERED) return
+
+            val alertId = intent.getStringExtra(EXTRA_ALERT_ID).orEmpty()
+            val actualKey = intent.getStringExtra(EXTRA_ACTUAL_KEY).orEmpty()
+            val actualValue = intent.getDoubleExtra(EXTRA_ACTUAL_VALUE, Double.NaN)
+            val actualMsg = intent.getStringExtra(EXTRA_ACTUAL_MESSAGE).orEmpty()
+
+            if (alertId.isBlank() || actualKey.isBlank() || actualValue.isNaN()) {
+                Log.w(MAIN_TAG, "Ignored ACTION_ALERT_TRIGGERED (missing extras)")
+                return
+            }
+
+            // Convert the broadcast into the SAME intent shape as a notification-tap launch
+            val uiIntent = Intent(this@MainActivity, MainActivity::class.java).apply {
+                action = ACTION_OPEN_ALERT_SURVEY
+                putExtra(EXTRA_ALERT_ID, alertId)
+                putExtra(EXTRA_ACTUAL_KEY, actualKey)
+                putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+                putExtra(EXTRA_ACTUAL_MESSAGE, actualMsg)
+            }
+
+            Log.d(
+                MAIN_TAG,
+                "Received alert broadcast; showing survey now (alertId=$alertId, key=$actualKey)"
+            )
+            alertIntentState.value = uiIntent
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
+        // Handles the case where we were opened from a notification tap
         alertIntentState.value = intent
+
+        // Register receiver so we can pop the survey even if user didn't tap the notification
+        registerAlertReceiver()
 
         setTheme(android.R.style.Theme_DeviceDefault)
         setContent { WearApp("Android", alertIntentState) }
@@ -53,7 +116,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Handles notification taps while app is already running
         alertIntentState.value = intent
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            unregisterReceiver(alertBroadcastReceiver)
+        } catch (_: Exception) {
+            // ignore
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private fun registerAlertReceiver() {
+        val filter = IntentFilter(ACTION_ALERT_TRIGGERED)
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            // Safer registration API on Android 13+
+            ContextCompat.registerReceiver(
+                this,
+                alertBroadcastReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(alertBroadcastReceiver, filter)
+        }
+
+        Log.d(MAIN_TAG, "Registered ACTION_ALERT_TRIGGERED receiver")
     }
 }
 
@@ -67,13 +160,12 @@ fun WearApp(greetingName: String, alertIntentState: MutableState<Intent?>) {
     val actualValue = intent?.getDoubleExtra(EXTRA_ACTUAL_VALUE, Double.NaN) ?: Double.NaN
     val actualMessage = intent?.getStringExtra(EXTRA_ACTUAL_MESSAGE).orEmpty()
 
-    // Normalize keys so tiny differences don't break correctness logic
     fun normalizeKey(k: String): String =
         k.trim()
             .lowercase()
             .replace("-", "_")
             .replace(" ", "_")
-            .replace("heartrate", "heart_rate") // common typo case
+            .replace("heartrate", "heart_rate")
             .replace("__", "_")
 
     val actualKey = normalizeKey(actualKeyRaw)
@@ -95,12 +187,11 @@ fun WearApp(greetingName: String, alertIntentState: MutableState<Intent?>) {
                 actualValue = actualValue,
                 actualMessage = actualMessage,
                 onDone = {
-                    // Clear so it doesn't keep reopening the survey on recomposition
+                    // Clear so it doesn't keep reopening
                     alertIntentState.value = null
                 }
             )
         } else {
-            // Normal home UI
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -134,7 +225,6 @@ fun AlertSurveyScreen(
     actualMessage: String,
     onDone: () -> Unit
 ) {
-    // IMPORTANT: These keys MUST match the service "actualKey" extras.
     val options: List<Pair<String, String>> = listOf(
         "high_heart_rate" to "High Heart Rate",
         "low_heart_rate" to "Low Heart Rate",
@@ -146,11 +236,11 @@ fun AlertSurveyScreen(
         "low_stress" to "Low Stress (High HRV proxy)"
     )
 
-    // UI state
     var answered by remember { mutableStateOf(false) }
     var guessKey by remember { mutableStateOf<String?>(null) }
     var isCorrect by remember { mutableStateOf(false) }
 
+    // IMPORTANT: this is now the foundation.lazy state (not deprecated)
     val listState = rememberScalingLazyListState()
 
     Scaffold(
@@ -165,20 +255,21 @@ fun AlertSurveyScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 item {
-                    Text("Health Alert!", textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "What do you think that vibration meant?",
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(10.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Health Alert!", textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "What do you think that vibration meant?",
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
                 }
 
                 items(options.size) { idx ->
                     val (key, label) = options[idx]
                     Button(
                         onClick = {
-                            // single tap = submit
                             guessKey = key
                             isCorrect = (key == actualKey)
                             answered = true
@@ -190,26 +281,26 @@ fun AlertSurveyScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(label)
-                    }
+                        Text(
+                        text = label,
+                        fontSize = 10.sp
+                    ) }
+
                     Spacer(Modifier.height(6.dp))
                 }
 
                 item {
                     Spacer(Modifier.height(6.dp))
-                    OutlinedButton(
-                        onClick = onDone,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                         Text("Cancel")
                     }
                     Spacer(Modifier.height(8.dp))
                 }
             }
         } else {
-            // Results screen (simple, no scrolling needed)
             val actualLabel = options.firstOrNull { it.first == actualKey }?.second ?: actualKey
-            val guessedLabel = options.firstOrNull { it.first == guessKey }?.second ?: (guessKey ?: "unknown")
+            val guessedLabel = options.firstOrNull { it.first == guessKey }?.second
+                ?: (guessKey ?: "unknown")
 
             Column(
                 modifier = Modifier
@@ -218,32 +309,22 @@ fun AlertSurveyScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    if (isCorrect) "✅ Correct!" else "❌ Not quite",
-                    textAlign = TextAlign.Center
-                )
+                Text(if (isCorrect) "✅ Correct!" else "❌ Not quite", textAlign = TextAlign.Center)
 
                 Spacer(Modifier.height(8.dp))
-
                 Text("You selected:", textAlign = TextAlign.Center)
                 Text(guessedLabel, textAlign = TextAlign.Center)
 
                 Spacer(Modifier.height(10.dp))
-
                 Text("Actual alert:", textAlign = TextAlign.Center)
                 Text(actualLabel, textAlign = TextAlign.Center)
 
                 Spacer(Modifier.height(6.dp))
-                if (actualMessage.isNotBlank()) {
-                    Text(actualMessage, textAlign = TextAlign.Center)
-                } else {
-                    Text("Value: ${"%.1f".format(actualValue)}", textAlign = TextAlign.Center)
-                }
+                if (actualMessage.isNotBlank()) Text(actualMessage, textAlign = TextAlign.Center)
+                else Text("Value: ${"%.1f".format(actualValue)}", textAlign = TextAlign.Center)
 
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                    Text("Done")
-                }
+                Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
             }
         }
     }
