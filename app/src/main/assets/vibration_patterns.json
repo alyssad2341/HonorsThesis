@@ -1963,8 +1963,8 @@
       "interval/rep",
       "incoming msg",
       "resume",
-      "warm up",
-      "cool down",
+      "warmup",
+      "cooldown",
       "start",
       "get ready"
     ],
@@ -4587,7 +4587,8 @@
     "usageExamples": [
       "warning",
       "alarm",
-      "warmup,cooldown"
+      "warmup",
+      "cooldown"
     ],
     "imagePath": "vib010"
   },
@@ -24933,7 +24934,8 @@
       "battery low",
       "milestone",
       "interval/rep",
-      "cooldownwarm up/cool down",
+      "cooldown",
+      "warmup",
       "running out of time",
       "incoming msg",
       "overtime",
@@ -28706,7 +28708,7 @@
       "get ready",
       "resume",
       "warmup",
-      "cooldownwarm up/cool down",
+      "cooldown",
       "incoming msg"
     ],
     "imagePath": "vib058"
@@ -29921,8 +29923,7 @@
       "running out of time",
       "reminder",
       "encouragement",
-      "above intended threshold",
-      "remain constant (no faster/slower"
+      "above intended threshold"
     ],
     "imagePath": "vib062"
   },
@@ -41539,7 +41540,7 @@
       "alarm",
       "milestone",
       "warmup",
-      "cooldownwarm up/cool down"
+      "cooldown"
     ],
     "imagePath": "vib083"
   },
