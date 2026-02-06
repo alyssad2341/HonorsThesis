@@ -33,8 +33,8 @@ class PhysEventViewModel(context: Context) : ViewModel() {
 
     private val _stressSubList = MutableStateFlow(
         listOf(
-            PhysSubEventModel("high_stress","High Stress", "Alert when heart rate variability falls below this value.", false,  1.0f, 4.5f, 3.5f, NotificationFrequency.EVERY_5_MIN),
-            PhysSubEventModel("low_stress", "Low Stress", "Alert when heart rate variability exceeds this value.", false, 5.9f, 10.0f, 7.5f, NotificationFrequency.EVERY_5_MIN)
+            PhysSubEventModel("high_stress","High Stress", "Alert when heart rate variability (standard deviation) falls below this value.", false,  1.0f, 4.5f, 3.5f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_stress", "Low Stress", "Alert when heart rate variability (standard deviation) exceeds this value.", false, 5.9f, 10.0f, 7.5f, NotificationFrequency.EVERY_5_MIN)
         )
     )
 

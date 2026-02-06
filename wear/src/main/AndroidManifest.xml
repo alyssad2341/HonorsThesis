@@ -54,6 +54,11 @@
             android:exported="false"
             android:foregroundServiceType="health" />
 
+        <service
+            android:name=".data.source.CaloriesService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
         <property
             android:name="android.health.connect.API_UPDATABILITY_MIN_SDK"
             android:value="34" />

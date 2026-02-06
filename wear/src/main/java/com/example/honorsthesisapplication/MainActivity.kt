@@ -29,6 +29,7 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.example.honorsthesisapplication.data.source.ActivityService
+import com.example.honorsthesisapplication.data.source.CaloriesService
 import com.example.honorsthesisapplication.data.source.HRVService
 import com.example.honorsthesisapplication.data.source.HeartRateService
 
@@ -73,6 +74,7 @@ fun RequestPermissionsAndStartServices() {
 
     // Prevent re-starting services repeatedly across recompositions
     val startedSteps = remember { mutableStateOf(false) }
+    val startedCalories = remember { mutableStateOf(false) }
     val startedHr = remember { mutableStateOf(false) }
     val startedHrv = remember { mutableStateOf(false) }
 
@@ -81,6 +83,13 @@ fun RequestPermissionsAndStartServices() {
         startedSteps.value = true
         ContextCompat.startForegroundService(context, Intent(context, ActivityService::class.java))
         Log.d(MAIN_TAG, "Started ActivityService (steps)")
+    }
+
+    fun startCaloriesService() {
+        if (startedCalories.value) return
+        startedCalories.value = true
+        ContextCompat.startForegroundService(context, Intent(context, CaloriesService::class.java))
+        Log.d(MAIN_TAG, "Started CaloriesService (calories)")
     }
 
     fun startHeartRateService() {
@@ -110,7 +119,7 @@ fun RequestPermissionsAndStartServices() {
     val permissions = buildList {
         add(activityPermission)
         postNotifPermission?.let { add(it) }
-        add(heartRatePermission) // HR + HRV both rely on this in your app
+        add(heartRatePermission) // HR + HRV + Calories (Health Services) rely on this in your app
     }.toTypedArray()
 
     val launcher = rememberLauncherForActivityResult(
@@ -120,7 +129,6 @@ fun RequestPermissionsAndStartServices() {
         val notificationsGranted = postNotifPermission?.let { results[it] == true } ?: true
         val hrGranted = results[heartRatePermission] == true
 
-        // Start what we can (steps is independent)
         if (stepsGranted) startStepsService()
         else Log.e(MAIN_TAG, "Steps permission denied (ActivityService not started).")
 
@@ -128,12 +136,16 @@ fun RequestPermissionsAndStartServices() {
             Log.e(MAIN_TAG, "Notification permission denied (alerts may not show).")
         }
 
-        // HR + HRV: start together when HR permission is granted
+        // Start Health-based services when HR permission is granted
         if (hrGranted) {
             startHeartRateService()
             startHRVService()
+            startCaloriesService()
         } else {
-            Log.e(MAIN_TAG, "HR permission denied (HeartRateService/HRVService not started).")
+            Log.e(
+                MAIN_TAG,
+                "HR permission denied (HeartRateService/HRVService/CaloriesService not started)."
+            )
         }
 
         Log.d(MAIN_TAG, "Permission results: $results")
@@ -154,10 +166,11 @@ fun RequestPermissionsAndStartServices() {
         // Start services that are already allowed
         if (stepsGranted) startStepsService()
 
-        // HR + HRV share the same permission in your approach
+        // Health-based services share the same permission in your approach
         if (hrGranted) {
             startHeartRateService()
             startHRVService()
+            startCaloriesService()
         }
 
         // Request anything missing
