@@ -46,6 +46,15 @@ import kotlin.math.max
 
 private const val CAL_TAG = "CaloriesService"
 
+/**
+ * These must match MainActivity (notification-tap routing)
+ */
+private const val ACTION_OPEN_ALERT_SURVEY = "ACTION_OPEN_ALERT_SURVEY"
+private const val EXTRA_ALERT_ID = "extra_alert_id"
+private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
+private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
+private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
+
 class CaloriesService : Service() {
 
     private var lastHighCalAlertTime = 0L
@@ -67,7 +76,7 @@ class CaloriesService : Service() {
     private val exerciseClient by lazy { HealthServices.getClient(this).exerciseClient }
     private var updateCallback: ExerciseUpdateCallback? = null
 
-    // CALORIES_TOTAL is cumulative since exercise start
+    // CALORIES_TOTAL is cumulative since exercise start; we convert to deltas.
     private var lastTotalCalories: Double? = null
     private var exerciseStarted = false
 
@@ -152,12 +161,8 @@ class CaloriesService : Service() {
                     }
 
                     val totalCalories: Double? = when (raw) {
-                        is CumulativeDataPoint<*> -> {
-                            val v = raw.total
-                            v.toDouble()
-                        }
+                        is CumulativeDataPoint<*> -> raw.total.toDouble()
 
-                        // Some versions/devices return a collection
                         is Collection<*> -> {
                             if (raw.isEmpty()) null
                             else {
@@ -165,7 +170,6 @@ class CaloriesService : Service() {
                                 for (p in raw) lastPoint = p
                                 if (lastPoint == null) null
                                 else {
-                                    // Try to read getValue() reflectively for maximum compatibility
                                     try {
                                         val m = lastPoint.javaClass.getMethod("getValue")
                                         (m.invoke(lastPoint) as Number).toDouble()
@@ -176,7 +180,6 @@ class CaloriesService : Service() {
                             }
                         }
 
-                        // Fallback: try reflection on raw directly (some APIs return point directly)
                         else -> {
                             try {
                                 val m = raw.javaClass.getMethod("getValue")
@@ -207,7 +210,6 @@ class CaloriesService : Service() {
                         addDeltaCalories(now, delta)
                         evaluateCaloriesAndAlert()
                     } else {
-                        // if total is flat, watch isn't increasing calories yet
                         Log.d(CAL_TAG, "CALORIES_TOTAL unchanged (total=$totalCalories)")
                     }
                 } catch (e: Exception) {
@@ -327,9 +329,11 @@ class CaloriesService : Service() {
                     lastHighCalAlertTime = now
                     Log.d(CAL_TAG, "HIGH calories alert (calLastHour=$calLastHour > threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showCaloriesAlert(
-                        "High Calories Alert!",
-                        "Calories last hour: ${"%.1f".format(calLastHour)}"
+
+                    showHealthAlertNotification(
+                        actualKey = "high_calories",
+                        actualValue = calLastHour,
+                        actualMessage = "Calories last hour: ${"%.1f".format(calLastHour)}"
                     )
                 }
             }
@@ -345,9 +349,11 @@ class CaloriesService : Service() {
                     lastLowCalAlertTime = now
                     Log.d(CAL_TAG, "LOW calories alert (calLastHour=$calLastHour < threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showCaloriesAlert(
-                        "Low Calories Alert!",
-                        "Calories last hour: ${"%.1f".format(calLastHour)}"
+
+                    showHealthAlertNotification(
+                        actualKey = "low_calories",
+                        actualValue = calLastHour,
+                        actualMessage = "Calories last hour: ${"%.1f".format(calLastHour)}"
                     )
                 }
             }
@@ -422,7 +428,7 @@ class CaloriesService : Service() {
 
         val alert = NotificationChannel(
             ALERT_CHANNEL_ID,
-            "Calories Alerts",
+            "Health Alerts",
             NotificationManager.IMPORTANCE_HIGH
         )
         manager.createNotificationChannel(alert)
@@ -457,26 +463,50 @@ class CaloriesService : Service() {
         return builder.build()
     }
 
-    private fun showCaloriesAlert(title: String, message: String) {
+    private fun showHealthAlertNotification(
+        actualKey: String,
+        actualValue: Double,
+        actualMessage: String
+    ) {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+
+        val now = System.currentTimeMillis()
+        val notificationId = (now % Int.MAX_VALUE).toInt()
+        val alertId = "calories_$now"
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_OPEN_ALERT_SURVEY
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            /* requestCode */ notificationId, // unique per alert
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(message)
+            .setContentTitle("Health Alert!")
+            .setContentText("Tap to identify the vibration.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .setTimeoutAfter(20_000L)
+            .setContentIntent(pendingIntent)
             .build()
 
-        manager.notify(CAL_ALERT_NOTIFICATION_ID, notification)
+        manager.notify(notificationId, notification)
     }
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "calories_monitor_channel"
-        private const val ALERT_CHANNEL_ID = "calories_alerts_channel"
+        private const val ALERT_CHANNEL_ID = "health_alerts_channel"
 
         private const val FOREGROUND_NOTIFICATION_ID = 401
-        private const val CAL_ALERT_NOTIFICATION_ID = 402
     }
 }

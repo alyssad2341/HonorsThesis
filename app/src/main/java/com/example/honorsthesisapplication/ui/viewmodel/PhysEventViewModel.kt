@@ -26,8 +26,10 @@ class PhysEventViewModel(context: Context) : ViewModel() {
 
     private val _activitySubList = MutableStateFlow(
         listOf(
-            PhysSubEventModel("high_activity","High Activity", "Alert when steps in the last hour exceed this value.", false, 700.0f, 4000.0f, 2000.0f, NotificationFrequency.EVERY_5_MIN),
-            PhysSubEventModel("low_activity", "Low Activity", "Alert when steps in the last hour fall below this value.", false, 0.0f, 300.0f, 60.0f, NotificationFrequency.EVERY_5_MIN)
+            PhysSubEventModel("high_activity","High Activity (Steps)", "Alert when steps in the last hour exceed this value.", false, 700.0f, 4000.0f, 2000.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_activity", "Low Activity (Steps)", "Alert when steps in the last hour fall below this value.", false, 0.0f, 300.0f, 60.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("high_calories","High Calories", "Alert when calories burned in the last hour exceed this value.", false, 200.0f, 1200.0f, 500.0f, NotificationFrequency.EVERY_5_MIN),
+            PhysSubEventModel("low_calories", "Low Calories", "Alert when calories burned in the last hour fall below this value.", false, 0.0f, 190.0f, 100.0f, NotificationFrequency.EVERY_5_MIN)
         )
     )
 

@@ -1,15 +1,27 @@
 package com.example.honorsthesisapplication.data.source
 
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.*
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.MeasureCallback
-import androidx.health.services.client.data.*
+import androidx.health.services.client.data.Availability
+import androidx.health.services.client.data.DataPointContainer
+import androidx.health.services.client.data.DataType
+import androidx.health.services.client.data.DeltaDataType
 import androidx.health.services.client.unregisterMeasureCallback
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
@@ -17,11 +29,27 @@ import com.example.honorsthesisapplication.MainActivity
 import com.example.honorsthesisapplication.R
 import com.example.honorsthesisapplication.data.model.WatchAlertModel
 import com.example.honorsthesisapplication.data.repository.WatchAlertRepository
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.ArrayDeque
 import kotlin.math.sqrt
 
 private const val HRV_TAG = "HRVService"
+
+/**
+ * These must match MainActivity (notification-tap routing)
+ */
+private const val ACTION_OPEN_ALERT_SURVEY = "ACTION_OPEN_ALERT_SURVEY"
+private const val EXTRA_ALERT_ID = "extra_alert_id"
+private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
+private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
+private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
 
 class HRVService : Service() {
 
@@ -40,8 +68,8 @@ class HRVService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private lateinit var repo: WatchAlertRepository
-    private var lowHrvAlert: WatchAlertModel? = null   // high_stress
-    private var highHrvAlert: WatchAlertModel? = null  // low_stress
+    private var lowHrvAlert: WatchAlertModel? = null   // high_stress (low variability)
+    private var highHrvAlert: WatchAlertModel? = null  // low_stress (high variability)
 
     override fun onCreate() {
         super.onCreate()
@@ -110,14 +138,18 @@ class HRVService : Service() {
             }
         }
 
-        hrCallback?.let {
-            measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, it)
-            Log.d(HRV_TAG, "MeasureCallback registered successfully")
+        try {
+            hrCallback?.let {
+                measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, it)
+                Log.d(HRV_TAG, "MeasureCallback registered successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(HRV_TAG, "Failed to register HR MeasureCallback: ${e.message}", e)
         }
     }
 
     private fun addBpmSample(timestamp: Long, bpm: Int) {
-        if (bpm <= 0) return // ignore invalid samples
+        if (bpm <= 0) return
         bpmWindow.addLast(timestamp to bpm)
         trimWindow(timestamp)
         Log.d(HRV_TAG, "BPM sample=$bpm, windowSize=${bpmWindow.size}")
@@ -162,9 +194,15 @@ class HRVService : Service() {
                 val elapsed = now - lastLowHrvAlertTime
                 if (lastLowHrvAlertTime == 0L || elapsed >= cooldown) {
                     lastLowHrvAlertTime = now
-                    Log.d(HRV_TAG, "LOW HRV proxy alert triggered (sdBpm=$stdDev < threshold=$threshold)")
+                    Log.d(HRV_TAG, "LOW HRV proxy alert (sdBpm=$stdDev < threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showHrvAlert("Possible Stress", "Low variability: ${"%.2f".format(stdDev)}")
+
+                    // NOTE: actualKey here must match MainActivity options
+                    showHealthAlertNotification(
+                        actualKey = "high_stress",
+                        actualValue = stdDev,
+                        actualMessage = "Low variability: ${"%.2f".format(stdDev)}"
+                    )
                 }
             }
         }
@@ -177,9 +215,14 @@ class HRVService : Service() {
                 val elapsed = now - lastHighHrvAlertTime
                 if (lastHighHrvAlertTime == 0L || elapsed >= cooldown) {
                     lastHighHrvAlertTime = now
-                    Log.d(HRV_TAG, "HIGH HRV proxy alert triggered (sdBpm=$stdDev > threshold=$threshold)")
+                    Log.d(HRV_TAG, "HIGH HRV proxy alert (sdBpm=$stdDev > threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showHrvAlert("High HRV (Relaxed)", "Variability: ${"%.2f".format(stdDev)}")
+
+                    showHealthAlertNotification(
+                        actualKey = "low_stress",
+                        actualValue = stdDev,
+                        actualMessage = "Variability: ${"%.2f".format(stdDev)}"
+                    )
                 }
             }
         }
@@ -228,7 +271,7 @@ class HRVService : Service() {
                     Log.d(HRV_TAG, "Successfully unregistered HR sensor")
                 }
             } catch (e: Exception) {
-                Log.e(HRV_TAG, "Error unregistering sensor: ${e.message}")
+                Log.e(HRV_TAG, "Error unregistering sensor: ${e.message}", e)
             }
         }
 
@@ -251,7 +294,7 @@ class HRVService : Service() {
 
         val alert = NotificationChannel(
             ALERT_CHANNEL_ID,
-            "Stress Alerts",
+            "Health Alerts",
             NotificationManager.IMPORTANCE_HIGH
         )
         manager.createNotificationChannel(alert)
@@ -286,38 +329,51 @@ class HRVService : Service() {
         return builder.build()
     }
 
-    private fun showHrvAlert(title: String, message: String) {
+    private fun showHealthAlertNotification(
+        actualKey: String,
+        actualValue: Double,
+        actualMessage: String
+    ) {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        val ackIntent = Intent(this, AlertReceiver::class.java).apply {
-            action = "ACTION_ACKNOWLEDGE"
-            putExtra("alert_type", title)
-            putExtra("notification_id", HRV_ALERT_NOTIFICATION_ID)
+        val now = System.currentTimeMillis()
+        val notificationId = (now % Int.MAX_VALUE).toInt()
+        val alertId = "hrv_$now"
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_OPEN_ALERT_SURVEY
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
         }
-        val ackPendingIntent = PendingIntent.getBroadcast(
-            this, 1, ackIntent,
+
+        val contentPendingIntent = PendingIntent.getActivity(
+            this,
+            /* requestCode */ notificationId, // UNIQUE
+            openIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(message)
+            .setContentTitle("Health Alert!")
+            .setContentText("Tap to identify the vibration.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .setTimeoutAfter(20_000L)
-            .addAction(R.drawable.ic_launcher_foreground, "Acknowledge", ackPendingIntent)
+            .setContentIntent(contentPendingIntent)
             .build()
 
-        manager.notify(HRV_ALERT_NOTIFICATION_ID, notification)
+        manager.notify(notificationId, notification)
     }
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "hrv_monitor_channel"
-        private const val ALERT_CHANNEL_ID = "stress_alerts_channel"
+        private const val ALERT_CHANNEL_ID = "health_alerts_channel"
 
         private const val FOREGROUND_NOTIFICATION_ID = 301
-        private const val HRV_ALERT_NOTIFICATION_ID = 302
 
         private const val MIN_SAMPLES = 12
     }

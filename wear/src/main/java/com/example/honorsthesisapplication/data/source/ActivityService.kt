@@ -38,6 +38,15 @@ import kotlin.math.max
 
 private const val ACTIVITYTAG = "WatchActivityService"
 
+/**
+ * These must match MainActivity (notification-tap routing)
+ */
+private const val ACTION_OPEN_ALERT_SURVEY = "ACTION_OPEN_ALERT_SURVEY"
+private const val EXTRA_ALERT_ID = "extra_alert_id"
+private const val EXTRA_ACTUAL_KEY = "extra_actual_key"
+private const val EXTRA_ACTUAL_VALUE = "extra_actual_value"
+private const val EXTRA_ACTUAL_MESSAGE = "extra_actual_msg"
+
 class ActivityService : Service(), SensorEventListener {
 
     private var lastHighAlertTime = 0L
@@ -198,9 +207,18 @@ class ActivityService : Service(), SensorEventListener {
                 val elapsed = now - lastHighAlertTime
                 if (lastHighAlertTime == 0L || elapsed >= cooldown) {
                     lastHighAlertTime = now
-                    Log.d(ACTIVITYTAG, "HIGH activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
+                    Log.d(
+                        ACTIVITYTAG,
+                        "HIGH activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)"
+                    )
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showActivityAlert("High Activity Alert!", "Steps last hour: $stepsLastHour")
+
+                    // Generic notification, but pass actual data as hidden extras
+                    showActivityAlert(
+                        actualKey = "high_activity",
+                        actualMessage = "Steps last hour: $stepsLastHour",
+                        actualValue = stepsLastHour.toDouble()
+                    )
                 }
             }
         }
@@ -213,9 +231,17 @@ class ActivityService : Service(), SensorEventListener {
                 val elapsed = now - lastLowAlertTime
                 if (lastLowAlertTime == 0L || elapsed >= cooldown) {
                     lastLowAlertTime = now
-                    Log.d(ACTIVITYTAG, "LOW activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
+                    Log.d(
+                        ACTIVITYTAG,
+                        "LOW activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)"
+                    )
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showActivityAlert("Low Activity Alert!", "Steps last hour: $stepsLastHour")
+
+                    showActivityAlert(
+                        actualKey = "low_activity",
+                        actualMessage = "Steps last hour: $stepsLastHour",
+                        actualValue = stepsLastHour.toDouble()
+                    )
                 }
             }
         }
@@ -276,7 +302,7 @@ class ActivityService : Service(), SensorEventListener {
 
         val alert = NotificationChannel(
             ALERT_CHANNEL_ID,
-            "Activity Alerts",
+            "Health Alerts",
             NotificationManager.IMPORTANCE_HIGH
         )
         manager.createNotificationChannel(alert)
@@ -310,26 +336,50 @@ class ActivityService : Service(), SensorEventListener {
         return builder.build()
     }
 
-    private fun showActivityAlert(title: String, message: String) {
+    private fun showActivityAlert(
+        actualKey: String,
+        actualMessage: String,
+        actualValue: Double
+    ) {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
+        val alertId = "activity_${System.currentTimeMillis()}"
+        val requestCode = (System.currentTimeMillis() and 0x7FFFFFFF).toInt()
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_OPEN_ALERT_SURVEY
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_ALERT_ID, alertId)
+            putExtra(EXTRA_ACTUAL_KEY, actualKey)
+            putExtra(EXTRA_ACTUAL_VALUE, actualValue)
+            putExtra(EXTRA_ACTUAL_MESSAGE, actualMessage)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            requestCode,
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // IMPORTANT: generic text only (do NOT reveal actual alert)
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(message)
+            .setContentTitle("Health Alert!")
+            .setContentText("Tap to identify the alert.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .setTimeoutAfter(20_000L)
+            .setContentIntent(pendingIntent)
             .build()
 
-        manager.notify(ACTIVITY_ALERT_NOTIFICATION_ID, notification)
+        manager.notify(requestCode, notification) // unique notification id per alert
     }
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "activity_monitor_channel"
-        private const val ALERT_CHANNEL_ID = "activity_alerts_channel"
+        private const val ALERT_CHANNEL_ID = "health_alerts_channel"
 
         private const val FOREGROUND_NOTIFICATION_ID = 201
-        private const val ACTIVITY_ALERT_NOTIFICATION_ID = 303
     }
 }
