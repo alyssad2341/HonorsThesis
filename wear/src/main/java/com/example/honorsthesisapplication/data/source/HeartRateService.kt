@@ -1,36 +1,25 @@
 package com.example.honorsthesisapplication.data.source
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.honorsthesisapplication.R
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.MeasureCallback
-import androidx.health.services.client.data.Availability
-import androidx.health.services.client.data.DataPointContainer
-import androidx.health.services.client.data.DataType
-import androidx.health.services.client.data.DeltaDataType
-import androidx.wear.ongoing.Status
-import android.app.PendingIntent
-import android.media.AudioAttributes
+import androidx.health.services.client.data.*
 import androidx.health.services.client.unregisterMeasureCallback
 import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import com.example.honorsthesisapplication.MainActivity
+import com.example.honorsthesisapplication.R
 import com.example.honorsthesisapplication.data.model.WatchAlertModel
 import com.example.honorsthesisapplication.data.repository.WatchAlertRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 
-const val TAG = "WatchHeartRateService"
+private const val TAG = "WatchHeartRateService"
 
 class HeartRateService : Service() {
 
@@ -38,11 +27,9 @@ class HeartRateService : Service() {
     private var lastLowAlertTime = 0L
 
     private var hrCallback: MeasureCallback? = null
-    private val measureClient by lazy {
-        HealthServices.getClient(this).measureClient
-    }
+    private val measureClient by lazy { HealthServices.getClient(this).measureClient }
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLock: PowerManager.WakeLock? = null
 
     private lateinit var repo: WatchAlertRepository
@@ -55,62 +42,75 @@ class HeartRateService : Service() {
 
         repo = WatchAlertRepository(this)
 
-        // Acquire WakeLock early so CPU stays awake
+        // Keep CPU alive while monitoring in background
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "HonorsThesis:HRWakeLock"
         ).apply {
-            // Non-reference counted means one release() always works
             setReferenceCounted(false)
             acquire(12 * 60 * 60 * 1000L)
         }
 
-        // Start foreground notification
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
+        // ---- Foreground service (HEALTH type) ----
+        createChannels()
+        val fgNotification = createForegroundNotification()
 
-        // Load alerts asynchronously, then start heart rate callback
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // API 29+: pass explicit FGS type to match manifest foregroundServiceType="health"
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                fgNotification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(FOREGROUND_NOTIFICATION_ID, fgNotification)
+        }
+
+        // Load alerts + observe changes
         scope.launch {
             highAlert = repo.loadAlert("high_heart_rate")
             lowAlert = repo.loadAlert("low_heart_rate")
-
             Log.d(TAG, "High alert loaded: $highAlert")
             Log.d(TAG, "Low alert loaded: $lowAlert")
-
             startAlertObservers()
-
         }
+
         registerHeartRateCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        super.onStartCommand(intent, flags, startId)
-        // START_STICKY tells the OS to recreate the service if it gets killed
+        Log.d(TAG, "onStartCommand called")
         return START_STICKY
     }
 
     private fun registerHeartRateCallback() {
-        // Assign the object to the class variable hrCallback
         hrCallback = object : MeasureCallback {
-            override fun onAvailabilityChanged(dataType: DeltaDataType<*, *>, availability: Availability) {
+            override fun onAvailabilityChanged(
+                dataType: DeltaDataType<*, *>,
+                availability: Availability
+            ) {
                 Log.d(TAG, "Sensor availability changed: $availability")
             }
 
             override fun onDataReceived(data: DataPointContainer) {
                 val heartRateData = data.getData(DataType.HEART_RATE_BPM)
                 heartRateData.forEach { sample ->
-                    val bpm = sample.value
+                    val bpm = sample.value.toInt()
+                    if (bpm <= 0) return@forEach
                     Log.d(TAG, "REAL-TIME BPM: $bpm")
-                    checkHeartRate(bpm.toInt())
+                    checkHeartRate(bpm)
                 }
             }
         }
 
-        // Register for real-time heart rate updates
-        hrCallback?.let {
-            measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, it)
-            Log.d(TAG, "MeasureCallback registered successfully")
+        try {
+            hrCallback?.let {
+                measureClient.registerMeasureCallback(DataType.HEART_RATE_BPM, it)
+                Log.d(TAG, "MeasureCallback registered successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register HR MeasureCallback: ${e.message}", e)
         }
     }
 
@@ -118,11 +118,14 @@ class HeartRateService : Service() {
         val now = System.currentTimeMillis()
 
         highAlert?.let { alert ->
-            if (alert.enabled && alert.threshold != null && bpm > alert.threshold) {
+            val threshold = alert.threshold
+            val cooldown = (alert.frequencyMillis ?: 30_000L).coerceAtLeast(1_000L)
+
+            if (alert.enabled && threshold != null && bpm > threshold) {
                 val elapsed = now - lastHighAlertTime
-                if (lastHighAlertTime == 0L || elapsed >= (alert.frequencyMillis)) {
+                if (lastHighAlertTime == 0L || elapsed >= cooldown) {
                     lastHighAlertTime = now
-                    Log.d(TAG, "HIGH alert triggered at $now, BPM: $bpm")
+                    Log.d(TAG, "HIGH alert triggered, BPM: $bpm (threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
                     showHeartRateAlert("High Heart Rate Alert!", "BPM: $bpm")
                 }
@@ -130,11 +133,14 @@ class HeartRateService : Service() {
         }
 
         lowAlert?.let { alert ->
-            if (alert.enabled && alert.threshold != null && bpm < alert.threshold) {
+            val threshold = alert.threshold
+            val cooldown = (alert.frequencyMillis ?: 30_000L).coerceAtLeast(1_000L)
+
+            if (alert.enabled && threshold != null && bpm < threshold) {
                 val elapsed = now - lastLowAlertTime
-                if (lastLowAlertTime == 0L || elapsed >= (alert.frequencyMillis)) {
+                if (lastLowAlertTime == 0L || elapsed >= cooldown) {
                     lastLowAlertTime = now
-                    Log.d(TAG, "LOW alert triggered at $now, BPM: $bpm")
+                    Log.d(TAG, "LOW alert triggered, BPM: $bpm (threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
                     showHeartRateAlert("Low Heart Rate Alert!", "BPM: $bpm")
                 }
@@ -149,7 +155,6 @@ class HeartRateService : Service() {
                 Log.d(TAG, "High alert UPDATED: $it")
             }
         }
-
         scope.launch {
             repo.observeAlert("low_heart_rate").collect {
                 lowAlert = it
@@ -159,33 +164,26 @@ class HeartRateService : Service() {
     }
 
     private fun vibrateCustom(timings: LongArray, amplitudes: IntArray) {
-        // Check if we are on Android 12 (API 31) or higher
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibratorManager =
+                getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             val vibrator = vibratorManager.defaultVibrator
-
-            // Create the waveform (same for all versions)
             val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
 
-            // Branch logic based on Android Version
             if (Build.VERSION.SDK_INT >= 33) {
-                // API 33+ (Galaxy Watch 6/7): Use VibrationAttributes
                 val attributes = VibrationAttributes.Builder()
                     .setUsage(VibrationAttributes.USAGE_ALARM)
                     .build()
                 vibrator.vibrate(effect, attributes)
-
-            }else{
+            } else {
                 vibrator.vibrate(effect)
             }
-
-            Log.d(TAG, "Vibration sent via background-safe attributes")
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Unregister the HR sensor synchronously before exiting
+
         hrCallback?.let { callback ->
             try {
                 runBlocking {
@@ -193,10 +191,10 @@ class HeartRateService : Service() {
                     Log.d(TAG, "Successfully unregistered HR sensor")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error unregistering sensor: ${e.message}")
+                Log.e(TAG, "Error unregistering sensor: ${e.message}", e)
             }
         }
-        // Release WakeLock and stop measurement to save battery
+
         wakeLock?.let { if (it.isHeld) it.release() }
         scope.cancel()
         Log.d(TAG, "Service destroyed, WakeLock released")
@@ -204,18 +202,26 @@ class HeartRateService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Heart Rate Monitoring",
-            NotificationManager.IMPORTANCE_HIGH // Lower importance as it's a silent background task
-        )
+    // ---------- Notifications ----------
+    private fun createChannels() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+
+        val fg = NotificationChannel(
+            FOREGROUND_CHANNEL_ID,
+            "Heart Rate Monitoring",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        manager.createNotificationChannel(fg)
+
+        val alert = NotificationChannel(
+            ALERT_CHANNEL_ID,
+            "Heart Rate Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        manager.createNotificationChannel(alert)
     }
 
-    private fun createNotification(): Notification {
-        // Create an Intent to open the app if the user taps the icon
+    private fun createForegroundNotification(): Notification {
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -224,64 +230,63 @@ class HeartRateService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Build the Notification (Standard)
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
             .setContentTitle("HR Monitor Active")
-            .setContentText("Tracking vitals in background...")
+            .setContentText("Tracking heart rate in background…")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_WORKOUT) // Critical for Health Services priority
+            .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
-        // Wrap it in an Ongoing Activity
-        // This puts the icon on the watch face and prevents the OS from killing the sensor
         val ongoingActivity = OngoingActivity.Builder(
             applicationContext,
-            NOTIFICATION_ID,
+            FOREGROUND_NOTIFICATION_ID,
             builder
         )
-            .setAnimatedIcon(R.drawable.ic_launcher_foreground) // Use a static icon if you don't have an animated one
             .setStaticIcon(R.drawable.ic_launcher_foreground)
             .setTouchIntent(pendingIntent)
             .setStatus(Status.Builder().addTemplate("Monitoring BPM").build())
             .build()
 
         ongoingActivity.apply(applicationContext)
-
         return builder.build()
     }
 
     private fun showHeartRateAlert(title: String, message: String) {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        // Create the Intent for the Acknowledge button
         val ackIntent = Intent(this, AlertReceiver::class.java).apply {
             action = "ACTION_ACKNOWLEDGE"
             putExtra("alert_type", title)
+            putExtra("notification_id", HEART_RATE_ALERT_NOTIFICATION_ID)
         }
         val ackPendingIntent = PendingIntent.getBroadcast(
-            this, 0, ackIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            this,
+            0,
+            ackIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Build the Alert Notification
-        val alertNotification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val alertNotification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_MAX) // Makes it pop up (heads-up)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
-            .setTimeoutAfter(20000L) // MAKE IT GO AWAY AFTER 20 SECONDS
-            .addAction(R.drawable.ic_launcher_foreground, "Acknowledge", ackPendingIntent) // THE BUTTON
+            .setTimeoutAfter(20_000L)
+            .addAction(R.drawable.ic_launcher_foreground, "Acknowledge", ackPendingIntent)
             .build()
 
-        // Issue the notification (Use a different ID than the foreground service!)
-        notificationManager.notify(202, alertNotification)
+        notificationManager.notify(HEART_RATE_ALERT_NOTIFICATION_ID, alertNotification)
     }
 
     companion object {
-        private const val CHANNEL_ID = "hr_monitor_channel"
-        private const val NOTIFICATION_ID = 101
+        private const val FOREGROUND_CHANNEL_ID = "hr_monitor_channel"
+        private const val ALERT_CHANNEL_ID = "hr_alerts_channel"
+
+        private const val FOREGROUND_NOTIFICATION_ID = 101
+        private const val HEART_RATE_ALERT_NOTIFICATION_ID = 202
     }
 }

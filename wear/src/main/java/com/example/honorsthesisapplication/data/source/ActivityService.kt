@@ -1,13 +1,23 @@
 package com.example.honorsthesisapplication.data.source
 
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.*
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.wear.ongoing.OngoingActivity
@@ -16,10 +26,15 @@ import com.example.honorsthesisapplication.MainActivity
 import com.example.honorsthesisapplication.R
 import com.example.honorsthesisapplication.data.model.WatchAlertModel
 import com.example.honorsthesisapplication.data.repository.WatchAlertRepository
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.ArrayDeque
 import kotlin.math.max
-import kotlin.math.min
 
 private const val ACTIVITYTAG = "WatchActivityService"
 
@@ -28,7 +43,6 @@ class ActivityService : Service(), SensorEventListener {
     private var lastHighAlertTime = 0L
     private var lastLowAlertTime = 0L
 
-    // Periodic evaluation interval
     private val CHECK_INTERVAL_MILLIS = 30_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -64,8 +78,18 @@ class ActivityService : Service(), SensorEventListener {
             acquire(12 * 60 * 60 * 1000L)
         }
 
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
+        createChannels()
+
+        val notification = createForegroundNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+        }
 
         // Load alerts + start observers
         scope.launch {
@@ -76,7 +100,6 @@ class ActivityService : Service(), SensorEventListener {
             startAlertObservers()
         }
 
-        // Register step sensor listener
         registerStepSensors()
         startPeriodicChecks()
     }
@@ -96,7 +119,6 @@ class ActivityService : Service(), SensorEventListener {
             "Sensors: STEP_COUNTER=${stepCounterSensor != null}, STEP_DETECTOR=${stepDetectorSensor != null}"
         )
 
-        // Prefer STEP_COUNTER (best for deltas), fall back to STEP_DETECTOR
         val ok = when {
             stepCounterSensor != null ->
                 sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_NORMAL)
@@ -125,15 +147,12 @@ class ActivityService : Service(), SensorEventListener {
             }
 
             Sensor.TYPE_STEP_DETECTOR -> {
-                // typically 1.0 per step
                 addDeltaSteps(1)
             }
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-
-    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun addDeltaSteps(deltaSteps: Long) {
         val now = System.currentTimeMillis()
@@ -141,10 +160,10 @@ class ActivityService : Service(), SensorEventListener {
         stepWindow.addLast(now to deltaSteps)
         resetWindow(now)
 
-        val stepsLastHour = stepWindow.sumOf { it.second }
+        val stepsLastHour = stepWindow.sumOf { it.second }.toInt()
         Log.d(ACTIVITYTAG, "delta=$deltaSteps, stepsLastHour=$stepsLastHour")
 
-        checkActivityLevel(stepsLastHour.toInt())
+        checkActivityLevel(stepsLastHour)
     }
 
     private fun startPeriodicChecks() {
@@ -157,7 +176,6 @@ class ActivityService : Service(), SensorEventListener {
                 Log.d(ACTIVITYTAG, "[PERIODIC] stepsLastHour=$stepsLastHour")
 
                 checkActivityLevel(stepsLastHour)
-
                 delay(CHECK_INTERVAL_MILLIS)
             }
         }
@@ -174,10 +192,10 @@ class ActivityService : Service(), SensorEventListener {
 
         highAlert?.let { alert ->
             val threshold = alert.threshold
-            if (alert.enabled && threshold != null && stepsLastHour > threshold) {
-                val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
-                val elapsed = now - lastHighAlertTime
+            val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
 
+            if (alert.enabled && threshold != null && stepsLastHour > threshold) {
+                val elapsed = now - lastHighAlertTime
                 if (lastHighAlertTime == 0L || elapsed >= cooldown) {
                     lastHighAlertTime = now
                     Log.d(ACTIVITYTAG, "HIGH activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
@@ -189,10 +207,10 @@ class ActivityService : Service(), SensorEventListener {
 
         lowAlert?.let { alert ->
             val threshold = alert.threshold
-            if (alert.enabled && threshold != null && stepsLastHour < threshold) {
-                val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
-                val elapsed = now - lastLowAlertTime
+            val cooldown = max(alert.frequencyMillis ?: 60_000L, 1_000L)
 
+            if (alert.enabled && threshold != null && stepsLastHour < threshold) {
+                val elapsed = now - lastLowAlertTime
                 if (lastLowAlertTime == 0L || elapsed >= cooldown) {
                     lastLowAlertTime = now
                     Log.d(ACTIVITYTAG, "LOW activity alert triggered (stepsLastHour=$stepsLastHour, threshold=$threshold)")
@@ -246,25 +264,34 @@ class ActivityService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
+    private fun createChannels() {
+        val manager = getSystemService(NotificationManager::class.java)
+
+        val fg = NotificationChannel(
+            FOREGROUND_CHANNEL_ID,
             "Activity Monitoring",
             NotificationManager.IMPORTANCE_LOW
         )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        manager.createNotificationChannel(fg)
+
+        val alert = NotificationChannel(
+            ALERT_CHANNEL_ID,
+            "Activity Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        manager.createNotificationChannel(alert)
     }
 
-    private fun createNotification(): Notification {
+    private fun createForegroundNotification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
             .setContentTitle("Activity Monitor Active")
-            .setContentText("Tracking steps in background...")
+            .setContentText("Tracking steps in background…")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setSilent(true)
@@ -272,7 +299,7 @@ class ActivityService : Service(), SensorEventListener {
 
         val ongoingActivity = OngoingActivity.Builder(
             applicationContext,
-            NOTIFICATION_ID,
+            FOREGROUND_NOTIFICATION_ID,
             builder
         )
             .setTouchIntent(pendingIntent)
@@ -286,7 +313,7 @@ class ActivityService : Service(), SensorEventListener {
     private fun showActivityAlert(title: String, message: String) {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(message)
@@ -295,11 +322,14 @@ class ActivityService : Service(), SensorEventListener {
             .setTimeoutAfter(20_000L)
             .build()
 
-        manager.notify(303, notification)
+        manager.notify(ACTIVITY_ALERT_NOTIFICATION_ID, notification)
     }
 
     companion object {
-        private const val CHANNEL_ID = "activity_monitor_channel"
-        private const val NOTIFICATION_ID = 201
+        private const val FOREGROUND_CHANNEL_ID = "activity_monitor_channel"
+        private const val ALERT_CHANNEL_ID = "activity_alerts_channel"
+
+        private const val FOREGROUND_NOTIFICATION_ID = 201
+        private const val ACTIVITY_ALERT_NOTIFICATION_ID = 303
     }
 }

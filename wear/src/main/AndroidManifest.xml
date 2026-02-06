@@ -3,35 +3,26 @@
     xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
-    <uses-permission android:name="android.permission.health.READ_SKIN_TEMPERATURE" />
-
-    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
-
-    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
-
     <uses-permission android:name="com.samsung.android.permission.EXTRACT_HEALTH_DATA" />
-
     <uses-permission android:name="com.samsung.android.hardware.sensormanager.permission.READ_ADDITIONAL_HEALTH_DATA" />
 
+    <uses-feature android:name="android.hardware.type.watch" />
     <uses-feature
         android:name="android.hardware.health"
         android:required="true" />
-
-    <uses-feature android:name="android.hardware.type.watch" />
 
     <application
         android:allowBackup="true"
@@ -40,7 +31,9 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
 
-        <receiver android:name=".data.source.AlertReceiver" android:exported="false">
+        <receiver
+            android:name=".data.source.AlertReceiver"
+            android:exported="false">
             <intent-filter>
                 <action android:name="ACTION_ACKNOWLEDGE" />
             </intent-filter>
@@ -58,7 +51,6 @@
 
         <service
             android:name=".data.source.ActivityService"
-            android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="health" />
 
@@ -66,12 +58,12 @@
             android:name="android.health.connect.API_UPDATABILITY_MIN_SDK"
             android:value="34" />
 
-
         <service
             android:name=".data.source.PhoneDataSource"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.google.android.gms.wearable.BIND_LISTENER"
+                <action
+                    android:name="com.google.android.gms.wearable.BIND_LISTENER"
                     tools:ignore="WearableBindListener" />
             </intent-filter>
         </service>
@@ -97,6 +89,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
 
+    </application>
 </manifest>

@@ -3,15 +3,13 @@ package com.example.honorsthesisapplication.data.source
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.MeasureCallback
-import androidx.health.services.client.data.Availability
-import androidx.health.services.client.data.DataPointContainer
-import androidx.health.services.client.data.DataType
-import androidx.health.services.client.data.DeltaDataType
+import androidx.health.services.client.data.*
 import androidx.health.services.client.unregisterMeasureCallback
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
@@ -25,22 +23,14 @@ import kotlin.math.sqrt
 
 private const val HRV_TAG = "HRVService"
 
-/**
- * We compute a rolling-window variability metric (std dev of BPM over last N seconds).
- * Alerts are pulled from WatchAlertRepository (same pattern as HeartRateService/ActivityService):
- */
 class HRVService : Service() {
 
     private var lastLowHrvAlertTime = 0L
     private var lastHighHrvAlertTime = 0L
 
-    // How often we evaluate even if samples are sparse
     private val CHECK_INTERVAL_MILLIS = 30_000L
+    private val WINDOW_MILLIS = 60_000L
 
-    // Rolling window length for variability calculation (adjust to taste)
-    private val WINDOW_MILLIS = 60_000L // 60 seconds
-
-    // (timestamp, bpm)
     private val bpmWindow = ArrayDeque<Pair<Long, Int>>()
 
     private var hrCallback: MeasureCallback? = null
@@ -50,8 +40,8 @@ class HRVService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private lateinit var repo: WatchAlertRepository
-    private var lowHrvAlert: WatchAlertModel? = null
-    private var highHrvAlert: WatchAlertModel? = null
+    private var lowHrvAlert: WatchAlertModel? = null   // high_stress
+    private var highHrvAlert: WatchAlertModel? = null  // low_stress
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +49,6 @@ class HRVService : Service() {
 
         repo = WatchAlertRepository(this)
 
-        // Keep CPU alive while monitoring in background
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -69,17 +58,24 @@ class HRVService : Service() {
             acquire(12 * 60 * 60 * 1000L)
         }
 
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
+        createChannels()
 
-        // Load alerts + start observers (same pattern as your other services)
+        val notification = createForegroundNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                FOREGROUND_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+        }
+
         scope.launch {
-            lowHrvAlert = repo.loadAlert("high_stress")     // "stress" proxy
-            highHrvAlert = repo.loadAlert("low_stress")   // optional
-
+            lowHrvAlert = repo.loadAlert("high_stress")
+            highHrvAlert = repo.loadAlert("low_stress")
             Log.d(HRV_TAG, "high_stress alert loaded: $lowHrvAlert")
             Log.d(HRV_TAG, "low_stress alert loaded: $highHrvAlert")
-
             startAlertObservers()
         }
 
@@ -110,7 +106,6 @@ class HRVService : Service() {
                     addBpmSample(now, bpm)
                 }
 
-                // Evaluate immediately when we get fresh data
                 evaluateVariabilityAndAlert()
             }
         }
@@ -122,6 +117,7 @@ class HRVService : Service() {
     }
 
     private fun addBpmSample(timestamp: Long, bpm: Int) {
+        if (bpm <= 0) return // ignore invalid samples
         bpmWindow.addLast(timestamp to bpm)
         trimWindow(timestamp)
         Log.d(HRV_TAG, "BPM sample=$bpm, windowSize=${bpmWindow.size}")
@@ -144,15 +140,8 @@ class HRVService : Service() {
         }
     }
 
-    /**
-     * Variability proxy:
-     *  - mean BPM over window
-     *  - std dev BPM over window (simple variability; NOT RMSSD)
-     */
     private fun evaluateVariabilityAndAlert() {
         val now = System.currentTimeMillis()
-
-        // Need a minimum number of points for any meaningful variability
         if (bpmWindow.size < MIN_SAMPLES) return
 
         val bpms = bpmWindow.map { it.second }
@@ -165,40 +154,32 @@ class HRVService : Service() {
             "window=${bpmWindow.size} meanBpm=${"%.1f".format(mean)} sdBpm=${"%.2f".format(stdDev)}"
         )
 
-        // ---- LOW "HRV" alert (stress proxy): sdBpm below threshold ----
         lowHrvAlert?.let { alert ->
-            val threshold = alert.threshold // interpret as "min sdBpm"
-            if (alert.enabled && threshold != null && stdDev < threshold) {
-                val cooldown = (alert.frequencyMillis ?: 60_000L).coerceAtLeast(1_000L)
-                val elapsed = now - lastLowHrvAlertTime
+            val threshold = alert.threshold
+            val cooldown = (alert.frequencyMillis ?: 60_000L).coerceAtLeast(1_000L)
 
+            if (alert.enabled && threshold != null && stdDev < threshold) {
+                val elapsed = now - lastLowHrvAlertTime
                 if (lastLowHrvAlertTime == 0L || elapsed >= cooldown) {
                     lastLowHrvAlertTime = now
                     Log.d(HRV_TAG, "LOW HRV proxy alert triggered (sdBpm=$stdDev < threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showHrvAlert(
-                        title = "Possible Stress (Low HRV Proxy)",
-                        message = "Low variability: sdBpm=${"%.2f".format(stdDev)}"
-                    )
+                    showHrvAlert("Possible Stress", "Low variability: ${"%.2f".format(stdDev)}")
                 }
             }
         }
 
-        // ---- HIGH "HRV" alert (optional): sdBpm above threshold ----
         highHrvAlert?.let { alert ->
-            val threshold = alert.threshold // interpret as "max sdBpm" trigger
-            if (alert.enabled && threshold != null && stdDev > threshold) {
-                val cooldown = (alert.frequencyMillis ?: 60_000L).coerceAtLeast(1_000L)
-                val elapsed = now - lastHighHrvAlertTime
+            val threshold = alert.threshold
+            val cooldown = (alert.frequencyMillis ?: 60_000L).coerceAtLeast(1_000L)
 
+            if (alert.enabled && threshold != null && stdDev > threshold) {
+                val elapsed = now - lastHighHrvAlertTime
                 if (lastHighHrvAlertTime == 0L || elapsed >= cooldown) {
                     lastHighHrvAlertTime = now
                     Log.d(HRV_TAG, "HIGH HRV proxy alert triggered (sdBpm=$stdDev > threshold=$threshold)")
                     vibrateCustom(alert.timings, alert.amplitudes)
-                    showHrvAlert(
-                        title = "High Variability",
-                        message = "sdBpm=${"%.2f".format(stdDev)}"
-                    )
+                    showHrvAlert("High HRV (Relaxed)", "Variability: ${"%.2f".format(stdDev)}")
                 }
             }
         }
@@ -239,6 +220,7 @@ class HRVService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
         hrCallback?.let { callback ->
             try {
                 runBlocking {
@@ -249,6 +231,7 @@ class HRVService : Service() {
                 Log.e(HRV_TAG, "Error unregistering sensor: ${e.message}")
             }
         }
+
         wakeLock?.let { if (it.isHeld) it.release() }
         scope.cancel()
         Log.d(HRV_TAG, "HRVService destroyed")
@@ -256,25 +239,34 @@ class HRVService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
+    private fun createChannels() {
+        val manager = getSystemService(NotificationManager::class.java)
+
+        val fg = NotificationChannel(
+            FOREGROUND_CHANNEL_ID,
             "HRV Proxy Monitoring",
             NotificationManager.IMPORTANCE_LOW
         )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        manager.createNotificationChannel(fg)
+
+        val alert = NotificationChannel(
+            ALERT_CHANNEL_ID,
+            "Stress Alerts",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        manager.createNotificationChannel(alert)
     }
 
-    private fun createNotification(): Notification {
+    private fun createForegroundNotification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HRV Proxy Monitor Active")
-            .setContentText("Monitoring heart rate variability proxy...")
+        val builder = NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
+            .setContentTitle("Stress Monitor Active")
+            .setContentText("Monitoring stress (HRV proxy)…")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setSilent(true)
@@ -283,11 +275,11 @@ class HRVService : Service() {
 
         val ongoingActivity = OngoingActivity.Builder(
             applicationContext,
-            NOTIFICATION_ID,
+            FOREGROUND_NOTIFICATION_ID,
             builder
         )
             .setTouchIntent(pendingIntent)
-            .setStatus(Status.Builder().addTemplate("Monitoring HRV Proxy").build())
+            .setStatus(Status.Builder().addTemplate("Monitoring Stress").build())
             .build()
 
         ongoingActivity.apply(applicationContext)
@@ -297,17 +289,17 @@ class HRVService : Service() {
     private fun showHrvAlert(title: String, message: String) {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        // Same "Acknowledge" pattern you use in HeartRateService
         val ackIntent = Intent(this, AlertReceiver::class.java).apply {
             action = "ACTION_ACKNOWLEDGE"
             putExtra("alert_type", title)
+            putExtra("notification_id", HRV_ALERT_NOTIFICATION_ID)
         }
         val ackPendingIntent = PendingIntent.getBroadcast(
-            this, 0, ackIntent,
+            this, 1, ackIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(message)
@@ -317,14 +309,16 @@ class HRVService : Service() {
             .addAction(R.drawable.ic_launcher_foreground, "Acknowledge", ackPendingIntent)
             .build()
 
-        manager.notify(ALERT_NOTIFICATION_ID, notification)
+        manager.notify(HRV_ALERT_NOTIFICATION_ID, notification)
     }
 
     companion object {
-        private const val CHANNEL_ID = "hrv_proxy_monitor_channel"
-        private const val NOTIFICATION_ID = 301
-        private const val ALERT_NOTIFICATION_ID = 302
+        private const val FOREGROUND_CHANNEL_ID = "hrv_monitor_channel"
+        private const val ALERT_CHANNEL_ID = "stress_alerts_channel"
 
-        private const val MIN_SAMPLES = 12 // tweak depending on how often samples arrive
+        private const val FOREGROUND_NOTIFICATION_ID = 301
+        private const val HRV_ALERT_NOTIFICATION_ID = 302
+
+        private const val MIN_SAMPLES = 12
     }
 }
